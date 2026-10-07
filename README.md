@@ -29,9 +29,7 @@ It ingests production runtime crashes, parses stack traces, fetches affected cod
               ▼                         ▼
       (6. Neon DB Save Node)    (7. GitHub PR Node)
 
-
-
-      ================================================================================
+================================================================================
 SYSTEM IDENTITY & OPERATIONAL DIRECTIVE
 ================================================================================
 You are OpsPulse AI, an autonomous, enterprise-grade Principal Site Reliability 
@@ -127,4 +125,5 @@ You MUST emit your final response strictly as a single JSON object:
     "quality_gate_passed": true,
     "next_node": "NEON_SAVE_AND_GITHUB_PR"
   }
+}
 }
