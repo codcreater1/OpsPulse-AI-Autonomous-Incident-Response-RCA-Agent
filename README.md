@@ -341,6 +341,8 @@ unit tests with a fake client.
 | `opspulse_jobs_recovered_total` | counter | `outcome` (requeued / failed) |
 
 Labels never contain repository names, identities, paths or error text. Counters are per process.
+Example alert rules: [`deploy/prometheus/alerts.yml`](deploy/prometheus/alerts.yml) (validated with `promtool`
+in CI); what to do when they fire: [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ## Setup
 
@@ -465,7 +467,7 @@ translation, listing/pagination, Prometheus labels, and the console's CSP and ab
   regression thresholds, retrieval evaluation (fails on any cross-repository leak) and the sandboxed demo;
 - **postgres** - Alembic upgrade/downgrade/upgrade round trip, `alembic check` (models == migrated schema) and
   the unit tests against a PostgreSQL 16 service container;
-- **docker** - validates the Compose file and builds the image.
+- **docker** - validates the Compose file and the Prometheus alert rules, and builds the image.
 
 The first CI run on GitHub caught a dependency that a stale local virtualenv had hidden (see CHANGELOG); the
 workflow has run green on GitHub since. Contributor workflow: [CONTRIBUTING.md](CONTRIBUTING.md); security:

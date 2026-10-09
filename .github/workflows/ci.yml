@@ -121,5 +121,10 @@ jobs:
       - name: Compose file is valid
         run: docker compose config --quiet
 
+      - name: Prometheus alert rules are valid
+        run: >
+          docker run --rm -v "$PWD/deploy/prometheus:/rules:ro" --entrypoint promtool
+          prom/prometheus:v3.15.0 check rules /rules/alerts.yml
+
       - name: Build
         run: docker build -t opspulse-ai:ci .

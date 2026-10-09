@@ -6,6 +6,7 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Added
+- Operations runbook (`docs/RUNBOOK.md`) and example Prometheus alert rules, checked with `promtool` in CI.
 - Sentry webhook adapter (`POST /integrations/sentry`): HMAC signature verification, project-to-repository
   mapping, idempotent per Sentry event, size and rate limits.
 - Durable PostgreSQL-backed job queue (migration 0004): compare-and-set claims with leases, automatic

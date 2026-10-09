@@ -1,0 +1,50 @@
+# Example Prometheus alerting rules for OpsPulse AI. Thresholds are starting points; tune them to your traffic.
+groups:
+  - name: opspulse
+    rules:
+      - alert: OpsPulseQueueBacklog
+        expr: max(opspulse_queue_depth) > 20
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Incident queue backlog above 20 for 10 minutes"
+          description: "Workers are not keeping up or are not running. See RUNBOOK 'Queue backlog'."
+
+      - alert: OpsPulseLLMProviderErrors
+        expr: |
+          sum(rate(opspulse_llm_attempts_total{outcome="provider_error"}[15m]))
+            / clamp_min(sum(rate(opspulse_llm_attempts_total[15m])), 1e-9) > 0.2
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 20% of LLM calls fail at the provider"
+          description: "Rate limits, an invalid key or an unavailable model. See RUNBOOK 'LLM provider errors'."
+
+      - alert: OpsPulseMalformedModelOutput
+        expr: |
+          sum(rate(opspulse_llm_attempts_total{outcome=~"malformed|schema_invalid"}[1h]))
+            / clamp_min(sum(rate(opspulse_llm_attempts_total{outcome!="provider_error"}[1h])), 1e-9) > 0.3
+        for: 1h
+        labels:
+          severity: info
+        annotations:
+          summary: "Over 30% of model replies are not schema-valid"
+          description: "Often a model or prompt change. Re-run the evaluation (RUNBOOK 'Model output quality')."
+
+      - alert: OpsPulseInterruptedJobs
+        expr: increase(opspulse_jobs_recovered_total{outcome="failed"}[1h]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Incidents failed after repeated worker interruptions"
+          description: "Workers crash or are killed mid-analysis. See RUNBOOK 'Interrupted incidents'."
+
+      - alert: OpsPulsePRCreationFailing
+        expr: increase(opspulse_incidents_finished_total{status="pr_failed"}[1h]) > 2
+        labels:
+          severity: warning
+        annotations:
+          summary: "Approved remediations failed to open pull requests"
+          description: "Check the GitHub token's permissions and rate limits. See RUNBOOK 'PR creation fails'."
