@@ -10,7 +10,7 @@ from src.db.client import session_scope
 from src.db.models import RemediationApproval
 from src.integrations.github import PullRequestResult
 from src.services import remediation_service
-from tests.unit.conftest import API_HEADERS
+from tests.unit.conftest import API_HEADERS, REPORTER_HEADERS, REVIEWER_HEADERS
 from tests.unit.factories import incident_payload, make_analysis
 
 
@@ -30,16 +30,15 @@ def proposal(client, fake_llm, source_fetch, set_settings, monkeypatch):
     return body, created
 
 
-def decide(client, incident, decision="approve", **overrides):
+def decide(client, incident, decision="approve", headers=REVIEWER_HEADERS, **overrides):
     approval = incident["pending_approval"]
     payload = {
         "approval_id": approval["approval_id"],
         "patch_sha256": approval["patch_sha256"],
         "decision": decision,
-        "reviewer": "alice",
         **overrides,
     }
-    return client.post(f"/incidents/{incident['incident_id']}/remediation/decision", json=payload, headers=API_HEADERS)
+    return client.post(f"/incidents/{incident['incident_id']}/remediation/decision", json=payload, headers=headers)
 
 
 def test_accepted_analysis_waits_for_approval_and_nothing_is_sent(proposal):
@@ -54,7 +53,7 @@ def test_approval_opens_exactly_one_pr(client, proposal):
     incident, created = proposal
     resp = decide(client, incident)
     assert resp.status_code == 200 and resp.json()["status"] == "pr_created"
-    assert len(created) == 1 and "Approved for PR creation by:** alice" in created[0]["body"]
+    assert len(created) == 1 and "Approved for PR creation by:** bob" in created[0]["body"]
     again = decide(client, incident)  # resumed / repeated approval
     assert again.status_code == 409 and len(created) == 1
     assert resp.json()["pending_approval"] is None
@@ -101,5 +100,32 @@ def test_decision_requires_authentication_and_valid_body(client, proposal):
     incident, _ = proposal
     url = f"/incidents/{incident['incident_id']}/remediation/decision"
     assert client.post(url, json={}).status_code == 401
-    bad = {"approval_id": str(uuid.uuid4()), "patch_sha256": "xyz", "decision": "maybe", "reviewer": ""}
-    assert client.post(url, json=bad, headers=API_HEADERS).status_code == 422
+    bad = {"approval_id": str(uuid.uuid4()), "patch_sha256": "xyz", "decision": "maybe"}
+    assert client.post(url, json=bad, headers=REVIEWER_HEADERS).status_code == 422
+
+
+def test_reporters_cannot_decide(client, proposal):
+    incident, created = proposal
+    resp = decide(client, incident, headers=REPORTER_HEADERS)
+    assert resp.status_code == 403 and "role 'reporter'" in resp.json()["error"]["message"] and not created
+
+
+def test_four_eyes_submitter_cannot_approve_own_incident(client, fake_llm, proposal):
+    _, created = proposal
+    fake_llm([make_analysis()])
+    own = client.post(
+        "/webhook/incident?wait=true", json=incident_payload(error_message="TypeError: other"), headers=REVIEWER_HEADERS
+    ).json()
+    assert own["submitted_by"] == "bob" and own["status"] == "awaiting_approval"
+    resp = decide(client, own)  # bob deciding on bob's own incident
+    assert resp.status_code == 403 and "may not decide" in resp.json()["error"]["message"] and not created
+
+
+def test_reviewer_identity_is_recorded_from_the_key(client, proposal):
+    from src.db import repositories
+
+    incident, _ = proposal
+    assert incident["submitted_by"] == "default"
+    decide(client, incident, "reject")
+    approval = repositories.get_approval(uuid.UUID(incident["pending_approval"]["approval_id"]))
+    assert approval["reviewer"] == "bob" and approval["status"] == "rejected"

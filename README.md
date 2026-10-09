@@ -1,5 +1,8 @@
 # OpsPulse AI
 
+[![CI](https://github.com/codcreater1/OpsPulse-AI-Autonomous-Incident-Response-RCA-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/codcreater1/OpsPulse-AI-Autonomous-Incident-Response-RCA-Agent/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![License: MIT](https://img.shields.io/badge/license-MIT-green)
+
 An AI-powered incident investigation and root-cause analysis assistant that combines repository context,
 historical incidents, bounded self-correction and human-reviewed GitHub remediation.
 
@@ -27,16 +30,16 @@ which waits for an **explicit human approval** and is never merged automatically
 
 | Area | Implemented |
 |---|---|
-| Ingestion | `POST /webhook/incident` with validation, size limits, API-key auth (fail-closed), repository allow-list, idempotent client-supplied `incident_id` |
+| Ingestion | `POST /webhook/incident` with validation, size limits, role-based API keys (fail-closed, stored as SHA-256), per-identity rate limit, repository allow-list, idempotent client-supplied `incident_id` |
 | Orchestration | Compiled LangGraph `StateGraph`, one typed state contract, bounded retry loop (`MAX_ANALYSIS_ITERATIONS`) |
 | Context | Stack-trace parsing (Python, JS, Java, Go), GitHub source window around the failing line, ranked same-repository history |
 | Analysis | Groq (`llama-3.3-70b-versatile` by default) in JSON mode, validated by a Pydantic schema; every evidence item labelled *observed / inference / hypothesis* |
 | Quality gate | Deterministic, weighted checks with *blocking* checks: schema, trigger frame, **verbatim evidence quotes**, file grounding, patch applies to retrieved source, locality, size |
-| Remediation | Opt-in; policy-checked single-file diff; **human approval bound to the patch SHA-256**; deterministic branch per failure; duplicate-PR guard; draft PRs |
+| Remediation | Opt-in; policy-checked single-file diff; **human approval bound to the patch SHA-256 by an authenticated reviewer other than the submitter (four-eyes)**; deterministic branch per failure; duplicate-PR guard; draft PRs |
 | Persistence | PostgreSQL/Neon via SQLAlchemy 2, Alembic migrations, failure taxonomy (`error_category`) |
 | Observability | Structured JSON logs with incident correlation and secret redaction; Langfuse v4 traces with content masking by default |
 | Evaluation | 26-case synthetic RCA dataset, deterministic metrics, mock and live modes; labelled retrieval dataset comparing two ranking strategies |
-| Delivery | 139 offline unit tests, opt-in live tests, GitHub Actions workflow, Dockerfile + Compose, reproducible demo |
+| Delivery | 153 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
 
 ## Architecture
 
@@ -81,6 +84,11 @@ flowchart LR
 | `src/versions.py` | Prompt / evaluator / retrieval versions recorded with every analysis and report |
 | `evals/` | Datasets, harness, metrics, runners |
 
+Design decisions are recorded in [`docs/adr/`](docs/adr): the deterministic gate
+([0001](docs/adr/0001-deterministic-quality-gate.md)), side effects outside the graph and no checkpointer
+([0002](docs/adr/0002-side-effects-outside-the-graph.md)), lexical retrieval before embeddings
+([0003](docs/adr/0003-lexical-retrieval-before-embeddings.md)).
+
 **Why side effects live outside the graph:** the analysis node may run up to `MAX_ANALYSIS_ITERATIONS` times.
 Keeping DB writes and GitHub calls in the service layer, after the graph finishes, makes it impossible for a
 retry to open a second PR.
@@ -110,7 +118,7 @@ Persisted incident `status` (with `error_category` explaining partial results / 
 | Status | Meaning |
 |---|---|
 | `processing` | accepted, analysis running |
-| `failed` | no usable analysis (`llm_*`, `internal_error`) |
+| `failed` | no usable analysis (`llm_*`, `internal_error`, `interrupted` - the process stopped mid-analysis) |
 | `needs_review` | analysis stored but not accepted (`retry_budget_exhausted`, `insufficient_evidence`, `no_code_fix`, `source_unavailable`, `malformed_model_output`, `remediation_policy_violation`) |
 | `analysis_ready` | accepted; remediation disabled or no token (`remediation_skipped`) |
 | `awaiting_approval` | accepted; a PR proposal waits for a human decision |
@@ -232,10 +240,12 @@ Enforced in code (`src/services/remediation_service.py`), never by the model:
 1. Remediation is **off** unless `ENABLE_GITHUB_REMEDIATION=true` and a token is present.
 2. Patch policy: single file, header path == retrieved file, not under `.github/`, no `..`, at most
    `MAX_PATCH_CHANGED_LINES` changed lines, and it must apply to the **current default-branch head**.
-3. With `REQUIRE_REMEDIATION_APPROVAL=true` (default) the incident stops in `awaiting_approval`. The reviewer
-   calls `POST /incidents/{id}/remediation/decision` with the `approval_id` **and the patch SHA-256** shown by
-   `GET /incidents/{id}`. Approvals bound to another incident (404), a different/stale patch, an expired
-   proposal (`APPROVAL_TTL_HOURS`) or an already-decided proposal (409) are refused. No decision = no action.
+3. With `REQUIRE_REMEDIATION_APPROVAL=true` (default) the incident stops in `awaiting_approval`. A client with
+   the `reviewer` or `admin` role calls `POST /incidents/{id}/remediation/decision` with the `approval_id` **and
+   the patch SHA-256** shown by `GET /incidents/{id}`. The reviewer is the authenticated identity, and it must
+   differ from the identity that submitted the incident (four-eyes; `ALLOW_SELF_APPROVAL=false`). Reporters (403),
+   self-approval (403), another incident's approval (404), a different/stale patch, an expired proposal
+   (`APPROVAL_TTL_HOURS`) or an already-decided proposal (409) are refused. No decision = no action.
 4. The approval row is claimed with a compare-and-set update *before* calling GitHub, so concurrent or repeated
    approvals cannot open two PRs; preconditions are re-checked at approval time.
 5. Branch `opspulse/fix-<fingerprint>`; an existing open PR for that branch is reused; a PR for the same
@@ -243,8 +253,8 @@ Enforced in code (`src/services/remediation_service.py`), never by the model:
 6. The PR body states that no tests were executed and lists evidence, uncertainties and suggested tests;
    `@` mentions from model text are neutralised.
 
-*Limitation:* the reviewer name is self-declared; the API has a single shared key, so "who approved" is recorded
-but not authenticated.
+*Limitation:* identities are API keys, not people - whoever holds the reviewer key can approve. Use one key per
+person or system and rotate keys you suspect were shared.
 
 ## Observability (Langfuse)
 
@@ -291,9 +301,18 @@ alembic upgrade head
 uvicorn src.main:app --reload --port 8000
 ```
 
-`.env.example` contains placeholders only. Required: `DATABASE_URL`, `API_KEY`, `ALLOWED_REPOSITORIES`,
-`GROQ_API_KEY`. Without `API_KEY` the incident endpoints return 503 (set `ALLOW_UNAUTHENTICATED=true` only for
-local experiments). GitHub token scopes: *Contents: Read* for analysis; additionally *Contents: Read & write* and
+`.env.example` contains placeholders only. Required: `DATABASE_URL`, `API_KEYS` (or the legacy `API_KEY`),
+`ALLOWED_REPOSITORIES`, `GROQ_API_KEY`. Without any key the incident endpoints return 503 (set
+`ALLOW_UNAUTHENTICATED=true` only for local experiments).
+
+**API keys and roles.** Create one key per client; only its SHA-256 goes into the configuration:
+
+```bash
+python -m scripts.make_api_key alertmanager reporter   # may submit and read incidents
+python -m scripts.make_api_key alice reviewer          # may also approve/reject remediation
+```
+
+Append the printed `name:role:sha256` entries to `API_KEYS` (comma-separated) and hand each key to its client. GitHub token scopes: *Contents: Read* for analysis; additionally *Contents: Read & write* and
 *Pull requests: Read & write* for remediation - fine-grained and limited to the allow-listed repositories.
 
 **Database migrations.** The schema is owned by Alembic; the app never creates tables implicitly.
@@ -338,8 +357,8 @@ Without `wait=true` the endpoint returns `202 {"incident_id": "...", "status": "
 
 ```bash
 curl -X POST "http://localhost:8000/incidents/<incident_id>/remediation/decision" \
-  -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  -d '{"approval_id": "<approval_id>", "patch_sha256": "<patch_sha256>", "decision": "approve", "reviewer": "alice"}'
+  -H "X-API-Key: $REVIEWER_KEY" -H "Content-Type: application/json" \
+  -d '{"approval_id": "<approval_id>", "patch_sha256": "<patch_sha256>", "decision": "approve", "note": "looks right"}'
 ```
 
 Errors always look like `{"error": {"code": "...", "message": "..."}}` and never echo submitted values,
@@ -349,7 +368,7 @@ stack traces or connection strings. Re-sending a request with the same `incident
 ## Testing and CI
 
 ```bash
-pytest                               # 139 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
+pytest                               # 153 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
 pytest --cov=src --cov=evals         # coverage (86% total at time of writing)
 ruff check src tests evals scripts migrations && ruff format --check src tests evals scripts migrations
 mypy                                 # src/
@@ -363,10 +382,17 @@ graph termination and retry budgets, provider-error classification, DB outages (
 GitHub failures, approval binding/staleness/expiry/double-approval, retrieval ranking and repository isolation,
 Alembic migrations vs. models, Langfuse enabled/disabled/broken, log redaction and the evaluation metrics.
 
-`.github/workflows/ci.yml` runs lint, format check, mypy, an import smoke test, unit tests with coverage, the
-mock evaluation with regression thresholds, the retrieval evaluation (fails on any cross-repository leak), the
-demo, and a Docker build. It uses no secrets and `contents: read` permissions. **Every step except the Docker
-build was run locally with the same commands; the workflow itself has not yet run on GitHub.**
+`.github/workflows/ci.yml` (no secrets, `contents: read`) has three jobs:
+
+- **quality** - ruff, format check, mypy, import smoke test, unit tests with coverage, mock evaluation with
+  regression thresholds, retrieval evaluation (fails on any cross-repository leak) and the sandboxed demo;
+- **postgres** - Alembic upgrade/downgrade/upgrade round trip, `alembic check` (models == migrated schema) and
+  the unit tests against a PostgreSQL 16 service container;
+- **docker** - builds the image.
+
+The first CI run on GitHub caught a dependency that a stale local virtualenv had hidden (see CHANGELOG); the
+workflow has run green on GitHub since. Contributor workflow: [CONTRIBUTING.md](CONTRIBUTING.md); security:
+[SECURITY.md](SECURITY.md).
 
 ## Demo
 
@@ -400,12 +426,13 @@ pipeline, gate and sandboxed verification - **not** the model's ability. PR crea
 
 ## Known limitations
 
-- **Untested against live services here:** Groq, GitHub (branch/PR creation), Neon/PostgreSQL and Langfuse were
-  exercised only through fakes and SQLite. The API was smoke-tested as a real process against SQLite. The Docker
-  image was not built locally (Docker was not running) and the CI workflow has not run on GitHub yet.
-- Background processing uses FastAPI `BackgroundTasks`: an incident whose process dies mid-analysis stays
-  `processing`. A durable queue would fix this.
-- Single tenant: one API key, one allow-list; incidents are isolated per repository, not per user.
+- **Untested against live services:** Groq, GitHub branch/PR creation, Neon and Langfuse were exercised only
+  through fakes. PostgreSQL is covered by the CI job (service container), and the Docker image builds in CI but
+  has not been run end to end with Compose.
+- Background processing uses FastAPI `BackgroundTasks`: an analysis interrupted by a crash is not resumed; it is
+  marked `failed/interrupted` at the next startup and must be re-submitted.
+- Single tenant: all identities share one repository allow-list; incidents are isolated per repository, not per
+  identity. The rate limiter is per process.
 - Path resolution maps runtime paths to repo files by suffix; monorepos with duplicate file names may resolve
   the wrong file, and very large repos may hit truncated git trees.
 - Only the failing file (+/- 50 lines) is retrieved; root causes in callers outside that window are found only
@@ -419,7 +446,6 @@ pipeline, gate and sandboxed verification - **not** the model's ability. PR crea
 - Run the live evaluation and publish its report next to the mock baseline; add more real-world-shaped cases.
 - Durable job execution (queue or LangGraph checkpointer with a PostgreSQL saver) so in-flight analyses survive
   restarts.
-- Per-user API identities so approvals are attributable; rate limiting.
 - PostgreSQL full-text search for candidate selection when histories outgrow the 200-row window; evaluate
   embeddings only if lexical recall proves insufficient on real data.
 - Optional sandboxed execution of the target repository's tests before proposing a PR.
@@ -430,6 +456,10 @@ Developed and tested on Windows with Python 3.11.9 and: fastapi 0.143.0, pydanti
 alembic 1.20.0, langgraph 1.2.14, langchain-core 1.6.9, langchain-groq 1.1.3, groq 0.37.1, langfuse 4.17.0,
 PyGithub 2.10.0, pytest 9.1.1, ruff 0.16.10, mypy 1.20.2. langfuse and langgraph were the latest releases on
 PyPI at the time of checking (2026-10-09).
+
+## License
+
+MIT - see [LICENSE](LICENSE).
 
 ## Team responsibilities
 

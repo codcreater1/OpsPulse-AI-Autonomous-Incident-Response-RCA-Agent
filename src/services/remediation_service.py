@@ -45,6 +45,10 @@ class ApprovalNotFoundError(ApprovalError):
     http_status = 404
 
 
+class ApprovalForbiddenError(ApprovalError):
+    http_status = 403
+
+
 class ApprovalConflictError(ApprovalError):
     """Already decided, superseded, expired or bound to a different patch."""
 

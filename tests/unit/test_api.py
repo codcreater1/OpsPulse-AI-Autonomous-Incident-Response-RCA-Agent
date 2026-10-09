@@ -33,13 +33,13 @@ def test_missing_or_wrong_api_key_is_rejected(client):
 
 
 def test_api_fails_closed_when_no_key_is_configured(client, set_settings):
-    set_settings(api_key="")
+    set_settings(api_identities=())
     resp = client.post("/webhook/incident", json=incident_payload())
-    assert resp.status_code == 503 and "API_KEY" in resp.json()["error"]["message"]
+    assert resp.status_code == 503 and "API_KEYS" in resp.json()["error"]["message"]
 
 
 def test_explicit_dev_opt_out_allows_unauthenticated(client, set_settings, fake_llm, source_fetch):
-    set_settings(api_key="", allow_unauthenticated=True)
+    set_settings(api_identities=(), allow_unauthenticated=True)
     fake_llm([make_analysis()])
     assert client.post("/webhook/incident", json=incident_payload()).status_code == 202
 

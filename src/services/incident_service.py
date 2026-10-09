@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import timedelta
 from functools import lru_cache
 from typing import Any, cast
 
@@ -30,13 +31,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from src.agent.graph import build_graph
 from src.agent.parsing import compute_fingerprint
 from src.agent.state import IncidentState, initial_state
+from src.config import settings
 from src.db import repositories
 from src.errors import ErrorCategory
 from src.integrations import github
 from src.integrations.observability import build_run_config, flush_traces, incident_trace
 from src.logging_config import incident_id_var, redact
 from src.services import remediation_service
-from src.services.remediation_service import ProposedFix, RemediationOutcome
+from src.services.remediation_service import ApprovalForbiddenError, ProposedFix, RemediationOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +61,14 @@ def get_graph() -> CompiledStateGraph:
 
 
 def submit_incident(
-    incident_id: uuid.UUID, repo_name: str, error_message: str, stack_trace: str
+    incident_id: uuid.UUID, repo_name: str, error_message: str, stack_trace: str, submitted_by: str | None = None
 ) -> tuple[dict[str, Any], bool]:
     """Persist a new `processing` incident, or return the existing one for a repeated delivery."""
     fingerprint = compute_fingerprint(repo_name, error_message, stack_trace)
     try:
-        row, created = repositories.create_incident(incident_id, repo_name, fingerprint, error_message, stack_trace)
+        row, created = repositories.create_incident(
+            incident_id, repo_name, fingerprint, error_message, stack_trace, submitted_by
+        )
     except SQLAlchemyError as exc:
         logger.error("database unavailable while creating incident: %s", type(exc).__name__)
         raise DatabaseUnavailableError("database unavailable") from exc
@@ -217,6 +221,8 @@ def decide_remediation(
             quality_score=row["quality_score"],
             iterations=row["iterations"],
         )
+        if not settings.allow_self_approval and row["submitted_by"] and row["submitted_by"] == reviewer:
+            raise ApprovalForbiddenError("the identity that submitted an incident may not decide its remediation")
         outcome = remediation_service.decide(fix, approval_id, patch_sha256, approve, reviewer, note)
         logger.info("remediation decision applied: approve=%s -> %s", approve, outcome.status)
         _persist_or_raise(incident_id, **_outcome_fields(outcome))
@@ -226,6 +232,18 @@ def decide_remediation(
     finally:
         flush_traces()
         incident_id_var.reset(token)
+
+
+def recover_interrupted_incidents() -> int:
+    """Fail incidents left in `processing` by a process that died (BackgroundTasks are not durable)."""
+    try:
+        return repositories.fail_stale_processing(
+            timedelta(minutes=settings.stale_processing_minutes),
+            "analysis was interrupted (process stopped); re-submit the incident",
+            ErrorCategory.INTERRUPTED.value,
+        )
+    except SQLAlchemyError as exc:
+        raise DatabaseUnavailableError("database unavailable") from exc
 
 
 def _persist_or_raise(incident_id: uuid.UUID, **fields: Any) -> None:

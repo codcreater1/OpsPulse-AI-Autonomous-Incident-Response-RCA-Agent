@@ -6,7 +6,9 @@ secret cannot leak into logs.
 
 from __future__ import annotations
 
+import hashlib
 import os
+import re
 from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
@@ -58,6 +60,38 @@ def _repo_list(name: str) -> frozenset[str]:
     return frozenset(item.strip().lower() for item in os.getenv(name, "").split(",") if item.strip())
 
 
+ROLES = ("reporter", "reviewer", "admin")
+_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+
+
+@dataclass(frozen=True)
+class ApiIdentity:
+    """One API client. Only the SHA-256 of its key is configured, never the key itself."""
+
+    name: str
+    role: str
+    key_sha256: str
+
+
+def _identities() -> tuple[ApiIdentity, ...]:
+    """API_KEYS="name:role:sha256hex,..." plus the legacy single API_KEY (admin identity "default")."""
+    identities = []
+    for entry in (item.strip() for item in os.getenv("API_KEYS", "").split(",")):
+        if not entry:
+            continue
+        parts = entry.split(":")
+        if len(parts) != 3 or not parts[0] or parts[1] not in ROLES or not _SHA256_HEX.match(parts[2]):
+            raise ConfigError("API_KEYS entries must look like name:reporter|reviewer|admin:<sha256 hex>")
+        identities.append(ApiIdentity(parts[0], parts[1], parts[2]))
+    legacy = _env("API_KEY")
+    if legacy:
+        identities.append(ApiIdentity("default", "admin", hashlib.sha256(legacy.encode()).hexdigest()))
+    names = [i.name for i in identities]
+    if len(names) != len(set(names)):
+        raise ConfigError("API_KEYS contains duplicate identity names")
+    return tuple(identities)
+
+
 @dataclass(frozen=True)
 class Settings:
     """Immutable snapshot of the environment, created once at import time."""
@@ -79,8 +113,18 @@ class Settings:
     database_url: str = field(default_factory=lambda: _env("DATABASE_URL", "NEON_DATABASE_URL"))
 
     # --- API security ---
-    api_key: str = field(default_factory=lambda: _env("API_KEY"))
+    api_identities: tuple[ApiIdentity, ...] = field(default_factory=_identities)
     allow_unauthenticated: bool = field(default_factory=lambda: _bool("ALLOW_UNAUTHENTICATED", False))
+    # Four-eyes rule: the identity that submitted an incident may not approve its remediation.
+    allow_self_approval: bool = field(default_factory=lambda: _bool("ALLOW_SELF_APPROVAL", False))
+    # Per-identity incident submissions per minute (in-process limiter; 0 disables).
+    rate_limit_per_minute: int = field(
+        default_factory=lambda: int(_number(("RATE_LIMIT_PER_MINUTE",), 30, int, 0, 10_000))
+    )
+    # `processing` incidents older than this are marked failed/interrupted at startup.
+    stale_processing_minutes: int = field(
+        default_factory=lambda: int(_number(("STALE_PROCESSING_MINUTES",), 30, int, 1, 1440))
+    )
     allowed_repositories: frozenset[str] = field(default_factory=lambda: _repo_list("ALLOWED_REPOSITORIES"))
 
     # --- GitHub ---

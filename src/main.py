@@ -17,6 +17,8 @@ from src.config import AGENT_VERSION, settings
 from src.db.client import ping_database
 from src.integrations.observability import flush_traces
 from src.logging_config import configure_logging
+from src.services import incident_service
+from src.services.incident_service import DatabaseUnavailableError
 
 configure_logging(settings.log_level)
 logger = logging.getLogger("opspulse")
@@ -28,6 +30,7 @@ _HTTP_CODES = {
     404: "not_found",
     405: "method_not_allowed",
     409: "conflict",
+    429: "rate_limited",
     422: "validation_error",
     503: "service_unavailable",
 }
@@ -42,8 +45,14 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         ping_database()
     except SQLAlchemyError as exc:
         logger.error("database not reachable at startup (%s); continuing, readiness will fail", type(exc).__name__)
-    if not settings.api_key and not settings.allow_unauthenticated:
-        logger.error("API_KEY is not set: incident endpoints will refuse requests (503)")
+    if not settings.api_identities and not settings.allow_unauthenticated:
+        logger.error("no API keys configured (API_KEYS / API_KEY): incident endpoints will refuse requests (503)")
+    try:
+        recovered = incident_service.recover_interrupted_incidents()
+        if recovered:
+            logger.warning("marked %d interrupted incident(s) as failed", recovered)
+    except DatabaseUnavailableError:
+        logger.error("could not check for interrupted incidents (database unavailable)")
     if not settings.allowed_repositories:
         logger.warning("ALLOWED_REPOSITORIES is empty: every incident will be rejected (403)")
     logger.info(
@@ -71,7 +80,9 @@ def _error(status_code: int, code: str, message: str) -> JSONResponse:
 
 @app.exception_handler(StarletteHTTPException)
 async def http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
-    return _error(exc.status_code, _HTTP_CODES.get(exc.status_code, "http_error"), str(exc.detail))
+    response = _error(exc.status_code, _HTTP_CODES.get(exc.status_code, "http_error"), str(exc.detail))
+    response.headers.update(exc.headers or {})  # e.g. Retry-After on 429
+    return response
 
 
 @app.exception_handler(RequestValidationError)

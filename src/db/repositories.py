@@ -46,6 +46,7 @@ def incident_to_dict(row: Incident) -> dict[str, Any]:
         "status_reason": row.status_reason,
         "error_category": row.error_category,
         "error_message": row.error_message,
+        "submitted_by": row.submitted_by,
         "affected_file": row.affected_file,
         "quality_score": row.quality_score,
         "iterations": row.iterations,
@@ -79,7 +80,12 @@ def approval_to_dict(row: RemediationApproval) -> dict[str, Any]:
 
 
 def create_incident(
-    incident_id: uuid.UUID, repo_name: str, fingerprint: str, error_message: str, stack_trace: str
+    incident_id: uuid.UUID,
+    repo_name: str,
+    fingerprint: str,
+    error_message: str,
+    stack_trace: str,
+    submitted_by: str | None = None,
 ) -> tuple[dict[str, Any], bool]:
     """Insert a `processing` row. Idempotent per id: returns (row, created)."""
     try:
@@ -94,6 +100,7 @@ def create_incident(
                 error_message=error_message,
                 stack_trace=stack_trace,
                 status="processing",
+                submitted_by=submitted_by,
             )
             session.add(row)
             session.flush()
@@ -170,6 +177,18 @@ def load_history_candidates(repo_name: str, exclude_id: str | None = None) -> li
 def find_similar_incidents(query: HistoryQuery, exclude_id: str | None = None, limit: int = 5) -> list[dict[str, Any]]:
     """Ranked, explained matches (strategy lexical-v1) for the prompt."""
     return to_prompt_records(rank_lexical(query, load_history_candidates(query.repo_name, exclude_id), limit))
+
+
+def fail_stale_processing(older_than: timedelta, reason: str, category: str) -> int:
+    """Mark incidents stuck in `processing` (e.g. the worker process died) as failed. Returns the count."""
+    cutoff = datetime.now(UTC) - older_than
+    with session_scope() as session:
+        result: CursorResult[Any] = session.execute(  # type: ignore[assignment]
+            update(Incident)
+            .where(Incident.status == "processing", Incident.updated_at < cutoff)
+            .values(status="failed", status_reason=reason, error_category=category, updated_at=datetime.now(UTC))
+        )
+        return result.rowcount
 
 
 def find_recent_pr(repo_name: str, fingerprint: str, hours: int = 24) -> str | None:

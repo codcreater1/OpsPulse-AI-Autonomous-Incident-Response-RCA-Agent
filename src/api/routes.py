@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import hmac
 import logging
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Security, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from fastapi.security import APIKeyHeader
 from sqlalchemy.exc import SQLAlchemyError
 
+from src.api.auth import Principal, authenticate, rate_limited_reporter, require_role
 from src.api.schemas import (
     ErrorResponse,
     HealthResponse,
@@ -29,24 +28,11 @@ from src.services.remediation_service import ApprovalError
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 _ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorResponse, "description": "Missing or invalid API key"},
+    403: {"model": ErrorResponse, "description": "Role not allowed, repository not allowed, or self-approval"},
     503: {"model": ErrorResponse, "description": "Database unavailable or authentication not configured"},
 }
-
-
-def require_api_key(provided: Annotated[str | None, Security(_api_key_header)]) -> None:
-    """Fail closed: without API_KEY the API refuses requests unless ALLOW_UNAUTHENTICATED=true (local dev)."""
-    if not settings.api_key:
-        if settings.allow_unauthenticated:
-            return
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "API authentication is not configured (set API_KEY)")
-    if not provided or not hmac.compare_digest(provided.encode(), settings.api_key.encode()):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid or missing API key")
-
-
-Authenticated = Depends(require_api_key)
 
 
 @router.get("/healthz", response_model=HealthResponse, tags=["health"])
@@ -70,7 +56,6 @@ def readyz() -> HealthResponse | JSONResponse:
     "/webhook/incident",
     response_model=IncidentAccepted | IncidentResult,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Authenticated],
     tags=["incidents"],
     responses={
         **_ERRORS,
@@ -78,22 +63,23 @@ def readyz() -> HealthResponse | JSONResponse:
             "model": IncidentResult,
             "description": "Synchronous result (wait=true) or existing incident for a repeated incident_id",
         },
-        403: {"model": ErrorResponse},
         409: {"model": ErrorResponse},
+        429: {"model": ErrorResponse, "description": "Per-identity rate limit exceeded (see Retry-After)"},
     },
 )
 def submit_incident(
     payload: IncidentRequest,
     background_tasks: BackgroundTasks,
+    principal: Annotated[Principal, Depends(rate_limited_reporter)],
     wait: bool = Query(False, description="Run the analysis synchronously and return the full result"),
 ) -> IncidentAccepted | JSONResponse:
-    """Accept an incident report. Analysis runs in the background unless `wait=true`."""
+    """Accept an incident report (roles: reporter, reviewer, admin). Runs in the background unless `wait=true`."""
     if not settings.is_repository_allowed(payload.repo_name):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "repository is not in ALLOWED_REPOSITORIES")
     incident_id = payload.incident_id or uuid.uuid4()
     try:
         row, created = incident_service.submit_incident(
-            incident_id, payload.repo_name, payload.error_message, payload.stack_trace
+            incident_id, payload.repo_name, payload.error_message, payload.stack_trace, submitted_by=principal.name
         )
     except IncidentConflictError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
@@ -124,7 +110,7 @@ def submit_incident(
 @router.get(
     "/incidents/{incident_id}",
     response_model=IncidentResult,
-    dependencies=[Authenticated],
+    dependencies=[Depends(authenticate)],
     tags=["incidents"],
     responses={**_ERRORS, 404: {"model": ErrorResponse}},
 )
@@ -141,19 +127,23 @@ def read_incident(incident_id: uuid.UUID) -> IncidentResult:
 @router.post(
     "/incidents/{incident_id}/remediation/decision",
     response_model=IncidentResult,
-    dependencies=[Authenticated],
     tags=["remediation"],
     responses={**_ERRORS, 404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
 )
-def decide_remediation(incident_id: uuid.UUID, body: RemediationDecision) -> IncidentResult:
-    """Approve or reject the PR proposed for an incident.
+def decide_remediation(
+    incident_id: uuid.UUID,
+    body: RemediationDecision,
+    principal: Annotated[Principal, Depends(require_role("reviewer"))],
+) -> IncidentResult:
+    """Approve or reject the PR proposed for an incident (roles: reviewer, admin).
 
     The request must name the pending approval and echo the SHA-256 of the proposed patch, so a decision can
-    only apply to the exact change the reviewer saw. Decisions are final; a second decision returns 409.
+    only apply to the exact change the reviewer saw. The reviewer is the authenticated identity, and it may not
+    be the identity that submitted the incident (four-eyes rule). Decisions are final; a repeat returns 409.
     """
     try:
         row = incident_service.decide_remediation(
-            incident_id, body.approval_id, body.patch_sha256, body.decision == "approve", body.reviewer, body.note
+            incident_id, body.approval_id, body.patch_sha256, body.decision == "approve", principal.name, body.note
         )
     except IncidentNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "incident not found") from exc

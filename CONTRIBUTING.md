@@ -1,0 +1,36 @@
+# Contributing
+
+## Development setup
+
+See the README "Setup" section, then install the git hooks:
+
+```bash
+pip install -r requirements-dev.txt
+pre-commit install
+```
+
+## Before opening a pull request
+
+Run the same checks as CI:
+
+```bash
+ruff check src tests evals scripts migrations
+ruff format --check src tests evals scripts migrations
+mypy
+pytest --cov=src --cov=evals
+python -m evals.run_rca --mode mock --min structured_output_validity=0.9 --min evidence_grounding_accuracy=0.95 --min inconclusive_not_accepted_rate=1.0
+python -m evals.run_retrieval
+```
+
+## Rules of thumb
+
+- **Behaviour changes to prompts, the quality gate or retrieval** must bump the matching version in
+  `src/versions.py` and be evaluated on the existing datasets (`evals/`). Report the before/after numbers in
+  the pull request; never quote numbers you did not run.
+- **Schema changes** need an Alembic revision in `migrations/versions/`; CI checks that the migrated schema
+  matches the models (`alembic check`) on PostgreSQL.
+- **Side effects** (database writes, GitHub calls) belong in `src/services/`, never in graph nodes.
+- **External services** are faked in unit tests; tests that need real credentials go in `tests/integration/`
+  and must skip unless `RUN_LIVE_TESTS=1`.
+- Do not log or persist secrets, full prompts or source code; use `redact()` for anything that could contain them.
+- Architectural decisions with lasting impact get a short record in `docs/adr/`.

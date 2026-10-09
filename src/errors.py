@@ -20,6 +20,7 @@ class ErrorCategory(StrEnum):
     LLM_BAD_REQUEST = "llm_bad_request"
     DATABASE_UNAVAILABLE = "database_unavailable"
     INTERNAL_ERROR = "internal_error"
+    INTERRUPTED = "interrupted"  # the process handling the incident stopped before finishing
     # partial results (analysis stored, a later stage did not happen)
     MALFORMED_MODEL_OUTPUT = "malformed_model_output"
     RETRY_BUDGET_EXHAUSTED = "retry_budget_exhausted"

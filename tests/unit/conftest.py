@@ -4,20 +4,27 @@ Every setting is pinned *before* `src` is imported so a developer's local `.env`
 let override already-set variables) can never leak real credentials or endpoints into the unit tests.
 """
 
+import hashlib
 import os
 import tempfile
 
 _DB = os.path.join(tempfile.mkdtemp(prefix="opspulse-test-"), "test.db")
 os.environ.update(
     {
-        "DATABASE_URL": f"sqlite:///{_DB}",
+        # TEST_DATABASE_URL lets CI run the same suite against a real PostgreSQL (tables are dropped per test!)
+        "DATABASE_URL": os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{_DB}",
         "NEON_DATABASE_URL": "",
         "GROQ_API_KEY": "",
         "MODEL_NAME": "test-model",
         "GITHUB_TOKEN": "",
         "LANGFUSE_PUBLIC_KEY": "",
         "LANGFUSE_SECRET_KEY": "",
-        "API_KEY": "test-api-key",
+        "API_KEY": "test-api-key",  # admin identity "default"
+        "API_KEYS": ",".join(
+            f"{name}:{role}:{hashlib.sha256(key.encode()).hexdigest()}"
+            for name, role, key in (("alice", "reporter", "reporter-key"), ("bob", "reviewer", "reviewer-key"))
+        ),
+        "RATE_LIMIT_PER_MINUTE": "1000",
         "ALLOW_UNAUTHENTICATED": "false",
         "ALLOWED_REPOSITORIES": "o/r",
         "ENABLE_GITHUB_REMEDIATION": "false",
@@ -32,6 +39,7 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from src.agent.graph import build_graph  # noqa: E402
+from src.api.auth import submission_limiter  # noqa: E402
 from src.config import settings  # noqa: E402
 from src.db import repositories  # noqa: E402
 from src.db.client import get_engine  # noqa: E402
@@ -40,7 +48,15 @@ from src.main import app  # noqa: E402
 from src.services import incident_service  # noqa: E402
 from tests.unit.factories import SOURCE_CONTEXT, FakeLLM  # noqa: E402
 
-API_HEADERS = {"X-API-Key": "test-api-key"}
+API_HEADERS = {"X-API-Key": "test-api-key"}  # admin "default"
+REPORTER_HEADERS = {"X-API-Key": "reporter-key"}  # alice
+REVIEWER_HEADERS = {"X-API-Key": "reviewer-key"}  # bob
+
+
+@pytest.fixture(autouse=True)
+def fresh_limiter():
+    submission_limiter.reset()
+    yield
 
 
 @pytest.fixture(autouse=True)

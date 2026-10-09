@@ -74,9 +74,6 @@ class RemediationDecision(BaseModel):
     approval_id: uuid.UUID
     patch_sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
     decision: Literal["approve", "reject"]
-    reviewer: str = Field(
-        ..., min_length=1, max_length=200, description="Self-declared reviewer name (recorded, not authenticated)"
-    )
     note: str | None = Field(None, max_length=2000)
 
 
@@ -87,6 +84,7 @@ class IncidentResult(BaseModel):
     status_reason: str | None = None
     error_category: str | None = Field(None, description="Failure / partial-result category (src/errors.py)")
     error_message: str
+    submitted_by: str | None = Field(None, description="Authenticated identity that submitted the incident")
     affected_file: str | None = None
     quality_score: float = Field(description="Deterministic rubric score (0-1). Not a probability of correctness.")
     iterations: int = Field(description="Number of completed LLM analysis attempts")

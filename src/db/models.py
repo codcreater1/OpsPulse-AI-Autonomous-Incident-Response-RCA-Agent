@@ -47,6 +47,7 @@ class Incident(Base):
     pr_branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status_reason: Mapped[str | None] = mapped_column("failure_reason", Text, nullable=True)
     error_category: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)  # migration 0002
+    submitted_by: Mapped[str | None] = mapped_column(String(100), nullable=True)  # migration 0003
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False, index=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
