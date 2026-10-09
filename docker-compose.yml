@@ -1,0 +1,32 @@
+# Local stack: the API plus a throwaway PostgreSQL. For Neon, drop the `db` service and set DATABASE_URL in .env.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: opspulse
+      POSTGRES_PASSWORD: opspulse-local-only
+      POSTGRES_DB: opspulse
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opspulse -d opspulse"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://opspulse:opspulse-local-only@db:5432/opspulse
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

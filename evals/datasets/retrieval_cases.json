@@ -1,0 +1,231 @@
+{
+  "version": "retrieval-cases-v1",
+  "corpus": [
+    {
+      "id": "h01",
+      "repo_name": "shop",
+      "group": "currency",
+      "affected_file": "billing/invoice.py",
+      "error_message": "KeyError: 'currency'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/billing/invoice.py\", line 10, in invoice_currency\n    return order[\"currency\"].upper()\nKeyError: 'currency'"
+    },
+    {
+      "id": "h02",
+      "repo_name": "shop",
+      "group": "currency",
+      "affected_file": "billing/invoice.py",
+      "error_message": "KeyError: 'currency'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/billing/invoice.py\", line 11, in invoice_currency\n    return order[\"currency\"].upper()\nKeyError: 'currency'"
+    },
+    {
+      "id": "h03",
+      "repo_name": "shop",
+      "group": "currency",
+      "affected_file": "billing/totals.py",
+      "error_message": "KeyError: 'currency'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/billing/totals.py\", line 10, in total_with_tax\n    rate = TAX[order[\"currency\"]]\nKeyError: 'currency'"
+    },
+    {
+      "id": "h04",
+      "repo_name": "shop",
+      "group": "db-down",
+      "affected_file": "app/db/pool.py",
+      "error_message": "psycopg2.OperationalError: could not connect to server: Connection refused",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/db/pool.py\", line 10, in connect\n    conn = psycopg2.connect(dsn)\npsycopg2.OperationalError: could not connect to server: Connection refused"
+    },
+    {
+      "id": "h05",
+      "repo_name": "shop",
+      "group": "db-down",
+      "affected_file": "workers/sync.py",
+      "error_message": "psycopg2.OperationalError: could not connect to server: Connection refused",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/workers/sync.py\", line 10, in run_sync\n    with get_connection() as conn:\npsycopg2.OperationalError: could not connect to server: Connection refused"
+    },
+    {
+      "id": "h06",
+      "repo_name": "shop",
+      "group": "none-user",
+      "affected_file": "app/notify.py",
+      "error_message": "AttributeError: 'NoneType' object has no attribute 'email'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/notify.py\", line 10, in notify\n    send_mail(user.email)\nAttributeError: 'NoneType' object has no attribute 'email'"
+    },
+    {
+      "id": "h07",
+      "repo_name": "shop",
+      "group": "bad-upstream-json",
+      "affected_file": "app/rates.py",
+      "error_message": "json.decoder.JSONDecodeError: Expecting value: line 1 column 1",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/rates.py\", line 10, in fetch_rates\n    return response.json()\njson.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)"
+    },
+    {
+      "id": "h08",
+      "repo_name": "shop",
+      "group": "payment-timeout",
+      "affected_file": "app/payments.py",
+      "error_message": "requests.exceptions.ReadTimeout: HTTPSConnectionPool(host='pay.example.test', port=443): Read timed out.",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/payments.py\", line 10, in charge\n    resp = session.post(url, json=body, timeout=10)\nrequests.exceptions.ReadTimeout: HTTPSConnectionPool(host='pay.example.test', port=443): Read timed out."
+    },
+    {
+      "id": "h09",
+      "repo_name": "shop",
+      "group": "noise-div",
+      "affected_file": "app/stats.py",
+      "error_message": "ZeroDivisionError: division by zero",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/stats.py\", line 10, in average\n    return sum(values) / len(values)\nZeroDivisionError: division by zero"
+    },
+    {
+      "id": "h10",
+      "repo_name": "shop",
+      "group": "noise-import",
+      "affected_file": "app/settings.py",
+      "error_message": "ModuleNotFoundError: No module named 'yaml'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/settings.py\", line 10, in <module>\n    import yaml\nModuleNotFoundError: No module named 'yaml'"
+    },
+    {
+      "id": "h11",
+      "repo_name": "shop",
+      "group": "noise-recursion",
+      "affected_file": "app/tree.py",
+      "error_message": "RecursionError: maximum recursion depth exceeded",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/tree.py\", line 10, in depth\n    return 1 + max(depth(c) for c in node['children'])\nRecursionError: maximum recursion depth exceeded"
+    },
+    {
+      "id": "o01",
+      "repo_name": "other",
+      "group": "currency",
+      "affected_file": "billing/invoice.py",
+      "error_message": "KeyError: 'currency'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/billing/invoice.py\", line 10, in invoice_currency\n    return order[\"currency\"].upper()\nKeyError: 'currency'"
+    },
+    {
+      "id": "o02",
+      "repo_name": "other",
+      "group": "db-down",
+      "affected_file": "app/db/pool.py",
+      "error_message": "psycopg2.OperationalError: could not connect to server: Connection refused",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/db/pool.py\", line 10, in connect\n    conn = psycopg2.connect(dsn)\npsycopg2.OperationalError: could not connect to server: Connection refused"
+    }
+  ],
+  "queries": [
+    {
+      "id": "q01",
+      "repo_name": "shop",
+      "affected_file": "billing/invoice.py",
+      "error_message": "KeyError: 'currency'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/billing/invoice.py\", line 12, in invoice_currency\n    return order[\"currency\"].upper()\nKeyError: 'currency'",
+      "relevant_ids": [
+        "h01",
+        "h02",
+        "h03"
+      ]
+    },
+    {
+      "id": "q02",
+      "repo_name": "shop",
+      "affected_file": "billing/refund.py",
+      "error_message": "KeyError: 'currency'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/billing/refund.py\", line 10, in refund_currency\n    code = order[\"currency\"]\nKeyError: 'currency'",
+      "relevant_ids": [
+        "h01",
+        "h02",
+        "h03"
+      ]
+    },
+    {
+      "id": "q03",
+      "repo_name": "shop",
+      "affected_file": "app/db/pool.py",
+      "error_message": "psycopg2.OperationalError: could not connect to server: Connection refused",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/db/pool.py\", line 14, in connect\n    conn = psycopg2.connect(dsn)\npsycopg2.OperationalError: could not connect to server: Connection refused",
+      "relevant_ids": [
+        "h04",
+        "h05"
+      ]
+    },
+    {
+      "id": "q04",
+      "repo_name": "shop",
+      "affected_file": "reports/export.py",
+      "error_message": "psycopg2.OperationalError: could not connect to server: Connection refused",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/reports/export.py\", line 10, in export_csv\n    rows = fetch_rows(query)\npsycopg2.OperationalError: could not connect to server: Connection refused",
+      "relevant_ids": [
+        "h04",
+        "h05"
+      ]
+    },
+    {
+      "id": "q05",
+      "repo_name": "shop",
+      "affected_file": "app/notify.py",
+      "error_message": "AttributeError: 'NoneType' object has no attribute 'email'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/notify.py\", line 15, in notify\n    send_mail(user.email)\nAttributeError: 'NoneType' object has no attribute 'email'",
+      "relevant_ids": [
+        "h06"
+      ]
+    },
+    {
+      "id": "q06",
+      "repo_name": "shop",
+      "affected_file": "app/sms.py",
+      "error_message": "AttributeError: 'NoneType' object has no attribute 'phone'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/sms.py\", line 10, in send_sms\n    dial(customer.phone)\nAttributeError: 'NoneType' object has no attribute 'phone'",
+      "relevant_ids": [
+        "h06"
+      ]
+    },
+    {
+      "id": "q07",
+      "repo_name": "shop",
+      "affected_file": "app/shipping.py",
+      "error_message": "json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/shipping.py\", line 10, in track\n    data = resp.json()\njson.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)",
+      "relevant_ids": [
+        "h07"
+      ]
+    },
+    {
+      "id": "q08",
+      "repo_name": "shop",
+      "affected_file": "app/payments.py",
+      "error_message": "requests.exceptions.ReadTimeout: HTTPSConnectionPool(host='pay.example.test', port=443): Read timed out.",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/payments.py\", line 10, in refund\n    resp = session.post(refund_url, json=body, timeout=10)\nrequests.exceptions.ReadTimeout: HTTPSConnectionPool(host='pay.example.test', port=443): Read timed out.",
+      "relevant_ids": [
+        "h08"
+      ]
+    },
+    {
+      "id": "q09",
+      "repo_name": "shop",
+      "affected_file": "app/export.py",
+      "error_message": "PermissionError: [Errno 13] Permission denied: '/data/export.csv'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/export.py\", line 10, in write_file\n    with open(path, 'w') as fh:\nPermissionError: [Errno 13] Permission denied: '/data/export.csv'",
+      "relevant_ids": []
+    },
+    {
+      "id": "q10",
+      "repo_name": "shop",
+      "affected_file": "app/server.py",
+      "error_message": "ValueError: invalid literal for int() with base 10: ''",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/server.py\", line 10, in server_port\n    return int(os.environ.get(\"PORT\", \"\"))\nValueError: invalid literal for int() with base 10: ''",
+      "relevant_ids": []
+    },
+    {
+      "id": "q11",
+      "repo_name": "shop",
+      "affected_file": null,
+      "error_message": "",
+      "stack_trace": "",
+      "relevant_ids": []
+    },
+    {
+      "id": "q12",
+      "repo_name": "other",
+      "affected_file": "billing/invoice.py",
+      "error_message": "KeyError: 'currency'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/billing/invoice.py\", line 10, in invoice_currency\n    return order[\"currency\"].upper()\nKeyError: 'currency'",
+      "relevant_ids": [
+        "o01"
+      ]
+    }
+  ]
+}

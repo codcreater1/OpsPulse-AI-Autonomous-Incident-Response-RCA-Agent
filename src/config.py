@@ -1,0 +1,125 @@
+"""Central, typed configuration. All values come from environment variables (.env supported).
+
+Validation errors name the offending variable but never echo its value, so a misconfigured
+secret cannot leak into logs.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+AGENT_VERSION = "1.1.0-opspulse"
+
+
+class ConfigError(ValueError):
+    """Raised when an environment variable has an invalid value."""
+
+
+def _env(*names: str, default: str = "") -> str:
+    """First non-empty value among `names` (supports legacy variable names)."""
+    for name in names:
+        value = os.getenv(name)
+        if value is not None and value.strip() != "":
+            return value.strip()
+    return default
+
+
+def _bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise ConfigError(f"{name} must be a boolean (true/false)")
+
+
+def _number(names: tuple[str, ...], default: float, cast: type, low: float, high: float) -> float:
+    raw = _env(*names)
+    if raw == "":
+        return default
+    try:
+        value = cast(raw)
+    except ValueError as exc:
+        raise ConfigError(f"{names[0]} must be a {cast.__name__}") from exc
+    if not low <= value <= high:
+        raise ConfigError(f"{names[0]} must be between {low} and {high}")
+    return value
+
+
+def _repo_list(name: str) -> frozenset[str]:
+    return frozenset(item.strip().lower() for item in os.getenv(name, "").split(",") if item.strip())
+
+
+@dataclass(frozen=True)
+class Settings:
+    """Immutable snapshot of the environment, created once at import time."""
+
+    # --- LLM (Groq) ---
+    groq_api_key: str = field(default_factory=lambda: _env("GROQ_API_KEY"))
+    model_name: str = field(default_factory=lambda: _env("MODEL_NAME", "GROQ_MODEL", default="llama-3.3-70b-versatile"))
+    llm_timeout_seconds: float = field(default_factory=lambda: _number(("LLM_TIMEOUT_SECONDS",), 60.0, float, 5, 300))
+    llm_max_retries: int = field(default_factory=lambda: int(_number(("LLM_MAX_RETRIES",), 2, int, 0, 5)))
+    # Optional USD prices per million tokens, used only for cost estimates in evaluation reports.
+    llm_cost_input_per_mtok: float = field(
+        default_factory=lambda: _number(("LLM_COST_INPUT_PER_MTOK",), 0.0, float, 0, 1000)
+    )
+    llm_cost_output_per_mtok: float = field(
+        default_factory=lambda: _number(("LLM_COST_OUTPUT_PER_MTOK",), 0.0, float, 0, 1000)
+    )
+
+    # --- Database ---
+    database_url: str = field(default_factory=lambda: _env("DATABASE_URL", "NEON_DATABASE_URL"))
+
+    # --- API security ---
+    api_key: str = field(default_factory=lambda: _env("API_KEY"))
+    allow_unauthenticated: bool = field(default_factory=lambda: _bool("ALLOW_UNAUTHENTICATED", False))
+    allowed_repositories: frozenset[str] = field(default_factory=lambda: _repo_list("ALLOWED_REPOSITORIES"))
+
+    # --- GitHub ---
+    github_token: str = field(default_factory=lambda: _env("GITHUB_TOKEN"))
+    enable_github_remediation: bool = field(default_factory=lambda: _bool("ENABLE_GITHUB_REMEDIATION", False))
+    github_pr_draft: bool = field(default_factory=lambda: _bool("GITHUB_PR_DRAFT", True))
+    # A pending approval must be explicitly approved via the API before any GitHub write happens.
+    require_remediation_approval: bool = field(default_factory=lambda: _bool("REQUIRE_REMEDIATION_APPROVAL", True))
+    approval_ttl_hours: int = field(default_factory=lambda: int(_number(("APPROVAL_TTL_HOURS",), 72, int, 1, 720)))
+    context_radius: int = field(default_factory=lambda: int(_number(("CODE_CONTEXT_RADIUS",), 50, int, 5, 200)))
+    max_patch_changed_lines: int = field(
+        default_factory=lambda: int(_number(("MAX_PATCH_CHANGED_LINES",), 40, int, 1, 400))
+    )
+
+    # --- Workflow ---
+    quality_threshold: float = field(
+        default_factory=lambda: _number(("QUALITY_THRESHOLD", "CONFIDENCE_THRESHOLD"), 0.85, float, 0.0, 1.0)
+    )
+    max_analysis_iterations: int = field(
+        default_factory=lambda: int(_number(("MAX_ANALYSIS_ITERATIONS", "MAX_ITERATIONS"), 3, int, 1, 5))
+    )
+
+    # --- Observability ---
+    langfuse_public_key: str = field(default_factory=lambda: _env("LANGFUSE_PUBLIC_KEY"))
+    langfuse_secret_key: str = field(default_factory=lambda: _env("LANGFUSE_SECRET_KEY"))
+    langfuse_host: str = field(default_factory=lambda: _env("LANGFUSE_HOST", default="https://cloud.langfuse.com"))
+    langfuse_capture_content: bool = field(default_factory=lambda: _bool("LANGFUSE_CAPTURE_CONTENT", False))
+    log_level: str = field(default_factory=lambda: _env("LOG_LEVEL", default="INFO").upper())
+
+    @property
+    def langfuse_enabled(self) -> bool:
+        return bool(self.langfuse_public_key and self.langfuse_secret_key)
+
+    @property
+    def github_configured(self) -> bool:
+        return bool(self.github_token)
+
+    def is_repository_allowed(self, repo_name: str) -> bool:
+        return repo_name.strip().lower() in self.allowed_repositories
+
+
+settings = Settings()
