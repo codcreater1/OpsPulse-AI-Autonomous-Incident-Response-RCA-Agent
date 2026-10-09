@@ -11,8 +11,8 @@ from typing import Any
 
 from src.config import AGENT_VERSION, settings
 
-PROMPT_VERSION = "rca-prompt-v2"  # src/agent/prompts.py (system prompt + output schema)
-EVALUATOR_VERSION = "quality-gate-v3"  # src/agent/evaluation.py + routing; v3 stops grounded no-patch analyses
+PROMPT_VERSION = "rca-prompt-v3"  # src/agent/prompts.py (system prompt + output schema)
+EVALUATOR_VERSION = "quality-gate-v4"  # src/agent/evaluation.py + routing; v3 stops grounded no-patch analyses
 RETRIEVAL_STRATEGY = "lexical-v1"  # src/retrieval/history.py (ranking of historical incidents)
 
 

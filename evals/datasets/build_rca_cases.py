@@ -418,7 +418,17 @@ case(
     [("app/accounts.py", "account_of", 'payload["account_id"]')],
     "KeyError: 'user_id'",
     {"root_cause_category": "missing_key", "inconclusive": True, "relevant_files": ["app/accounts.py"]},
-    [reply("unknown", quote='payload["account_id"]', fix=None, sufficient=False, confidence=0.2)],
+    [
+        # What gpt-oss-120b actually did in the first live run: a confident, well-grounded patch that ignores
+        # the user_id / account_id mismatch. quality-gate-v4 rejects it; the corrected reply abstains.
+        reply(
+            "missing_key",
+            quote='payload["account_id"]',
+            fix={"old": 'payload["account_id"]', "new": 'payload.get("account_id")'},
+            confidence=0.9,
+        ),
+        reply("unknown", quote='payload["account_id"]', fix=None, sufficient=False, confidence=0.2),
+    ],
 )
 
 REFUND = """def refund_amount(order):

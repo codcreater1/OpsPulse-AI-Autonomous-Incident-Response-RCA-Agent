@@ -7,6 +7,7 @@ only tests and a human reviewer can. See README "Evaluation limitations".
 
 from __future__ import annotations
 
+import ast
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -27,12 +28,21 @@ CHECK_WEIGHTS: dict[str, float] = {
     "diff_wellformed": 0.10,
     "diff_applies": 0.25,
     "patch_minimal": 0.05,
-    "patch_locality": 0.10,
+    "patch_locality": 0.05,
+    "trace_code_consistency": 0.05,
     "self_assessment": 0.05,
     "patch_effective": 0.05,
 }
 BLOCKING_CHECKS = frozenset(
-    {"schema", "trigger_grounding", "evidence_grounding", "diff_wellformed", "diff_applies", "patch_effective"}
+    {
+        "schema",
+        "trigger_grounding",
+        "evidence_grounding",
+        "trace_code_consistency",
+        "diff_wellformed",
+        "diff_applies",
+        "patch_effective",
+    }
 )
 LOCALITY_RADIUS = 30
 MIN_QUOTE_CHARS = 4
@@ -57,6 +67,7 @@ class EvaluationInput:
     code_context: str | None
     historical_matches: list[dict[str, Any]]
     max_changed_lines: int
+    error_message: str = ""
 
 
 @dataclass(frozen=True)
@@ -196,6 +207,76 @@ def check_affected_files(inp: EvaluationInput) -> CheckResult:
     return CheckResult((len(grounded) - len(ungrounded)) / len(grounded), detail)
 
 
+_KEY_ERROR_RE = re.compile(r"""KeyError: ['"](?P<name>[^'"\n]+)['"]""")
+_ATTRIBUTE_RE = re.compile(r"""has no attribute ['"](?P<name>\w+)['"]""")
+
+
+def _line_names(line: str) -> tuple[set[str], set[str], bool] | None:
+    """(string-literal subscript keys, attribute names, has a dynamic subscript/getattr) of one source line.
+
+    None when the line cannot be parsed on its own (then the check does not apply)."""
+    code = line.strip()
+    for candidate in (code, code + " pass", code.rstrip(":") if code.endswith(":") else None):
+        if not candidate:
+            continue
+        try:
+            tree = ast.parse(candidate)
+        except SyntaxError:
+            continue
+        keys, attrs, dynamic = set(), set(), False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Subscript):
+                if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+                    keys.add(node.slice.value)
+                else:
+                    dynamic = True
+            elif isinstance(node, ast.Attribute):
+                attrs.add(node.attr)
+            elif isinstance(node, ast.Call) and getattr(node.func, "id", None) in {"getattr", "get"}:
+                dynamic = True
+        return keys, attrs, dynamic
+    return None
+
+
+def check_trace_code_consistency(inp: EvaluationInput) -> CheckResult:
+    """Does the retrieved failing line contain the key / attribute the error names?
+
+    When the error says KeyError 'user_id' but the retrieved line only reads payload["account_id"], the running
+    code differs from what was retrieved (deploy drift, wrong branch): the analysis cannot be grounded and must
+    say so. Not applicable (score 1.0) when the error names nothing, the line is unavailable or unparsable, or
+    the line uses dynamic keys - so the check never fails on what it cannot judge.
+    """
+    first_line = (inp.error_message or "").strip().splitlines()[:1]
+    message = first_line[0] if first_line else ""
+    key = _KEY_ERROR_RE.search(message)
+    attr = _ATTRIBUTE_RE.search(message)
+    if not (key or attr) or not inp.code_context or inp.trigger is None:
+        return CheckResult(1.0, "not applicable")
+    try:
+        start, lines = parse_code_window(inp.code_context)
+    except PatchError:
+        return CheckResult(1.0, "not applicable")
+    index = inp.trigger.line - start
+    if not 0 <= index < len(lines):
+        return CheckResult(1.0, "not applicable: failing line outside the retrieved window")
+    names = _line_names(lines[index])
+    if names is None:
+        return CheckResult(1.0, "not applicable: failing line could not be parsed")
+    keys, attrs, dynamic = names
+    if key:
+        wanted, present, kind = key.group("name"), keys, "key"
+    else:
+        wanted, present, kind = attr.group("name") if attr else "", attrs, "attribute"
+    if dynamic or not present or wanted in present:
+        return CheckResult(1.0, "ok" if wanted in present else "not applicable: dynamic access on the failing line")
+    return CheckResult(
+        0.0,
+        f"the error names {kind} {wanted!r} but the retrieved failing line (line {inp.trigger.line}) only uses "
+        f"{sorted(present)}: the running code probably differs from the retrieved source. Do not propose a patch; "
+        "set evidence_sufficient to false and explain the discrepancy in uncertainties",
+    )
+
+
 def check_self_assessment(analysis: dict[str, Any]) -> CheckResult:
     flow = _section(analysis, "control_flow")
     if flow.get("needs_human_review") is True:
@@ -274,6 +355,7 @@ def evaluate(inp: EvaluationInput, threshold: float) -> Evaluation:
         "trigger_grounding": check_trigger(inp.analysis, inp.trigger),
         "evidence_grounding": check_evidence(inp),
         "affected_files_grounding": check_affected_files(inp),
+        "trace_code_consistency": check_trace_code_consistency(inp),
         "self_assessment": check_self_assessment(inp.analysis),
         **check_patch(inp),
     }

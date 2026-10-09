@@ -26,6 +26,10 @@ def _ratio(num: int | float, den: int | float, definition: str) -> dict[str, Any
     }
 
 
+def _provider_failed(r: Result) -> bool:
+    return r["workflow_status"] == "failed" and str(r.get("error_category") or "").startswith("llm_")
+
+
 def _abstained(r: Result) -> bool:
     return r["declared_insufficient"] or r["predicted_category"] == "unknown"
 
@@ -42,14 +46,17 @@ def compute_metrics(
 ) -> dict[str, Any]:
     attempts = [a for r in results for a in r["attempts"]]
     model_attempts = [a for a in attempts if "schema_valid" in a]  # excludes provider errors
-    conclusive = [r for r in results if not r["expected"]["inconclusive"]]
-    inconclusive = [r for r in results if r["expected"]["inconclusive"]]
-    accepted = [r for r in results if r["gate_passed"]]
-    with_files = [r for r in results if r["expected"]["relevant_files"]]
-    observed = sum(r["observed_quotes"] for r in results)
-    grounded = sum(r["grounded_quotes"] for r in results)
-    files = sum(len(r["affected_files"]) for r in results)
-    grounded_files = sum(r["grounded_files"] for r in results)
+    # Cases the provider prevented from finishing (rate limit, auth, outage) say nothing about analysis quality:
+    # they are excluded from the quality metrics and reported separately.
+    evaluated = [r for r in results if not _provider_failed(r)]
+    conclusive = [r for r in evaluated if not r["expected"]["inconclusive"]]
+    inconclusive = [r for r in evaluated if r["expected"]["inconclusive"]]
+    accepted = [r for r in evaluated if r["gate_passed"]]
+    with_files = [r for r in evaluated if r["expected"]["relevant_files"]]
+    observed = sum(r["observed_quotes"] for r in evaluated)
+    grounded = sum(r["grounded_quotes"] for r in evaluated)
+    files = sum(len(r["affected_files"]) for r in evaluated)
+    grounded_files = sum(r["grounded_files"] for r in evaluated)
 
     def wrong(r: Result) -> bool:
         return r["expected"]["inconclusive"] or r["predicted_category"] != r["expected"]["root_cause_category"]
@@ -67,6 +74,7 @@ def compute_metrics(
 
     return {
         "cases": len(results),
+        "cases_not_evaluated": [r["case_id"] for r in results if _provider_failed(r)],
         "structured_output_validity": _ratio(
             count(model_attempts, lambda a: a["schema_valid"]) if model_attempts else 0,
             len(model_attempts),
@@ -104,7 +112,9 @@ def compute_metrics(
             len(conclusive),
             "conclusive-labelled cases where the model abstained / conclusive-labelled cases",
         ),
-        "gate_acceptance_rate": _ratio(len(accepted), len(results), "cases accepted by the quality gate / cases"),
+        "gate_acceptance_rate": _ratio(
+            len(accepted), len(evaluated), "cases accepted by the quality gate / evaluated cases"
+        ),
         "false_acceptance_rate": _ratio(
             count(accepted, wrong),
             len(accepted),

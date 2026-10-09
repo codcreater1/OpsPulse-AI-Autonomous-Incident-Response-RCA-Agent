@@ -201,6 +201,7 @@ def run_case(case: EvalCase, model_factory: ModelFactory | None) -> dict[str, An
         code_context=final["code_context"],
         historical_matches=final["historical_matches"],
         max_changed_lines=settings.max_patch_changed_lines,
+        error_message=final["error_message"],
     )
     evidence = verify_evidence(inp)
     files = verify_affected_files(inp)

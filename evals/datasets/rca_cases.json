@@ -464,6 +464,15 @@
       },
       "mock_replies": [
         {
+          "category": "missing_key",
+          "quote": "payload[\"account_id\"]",
+          "fix": {
+            "old": "payload[\"account_id\"]",
+            "new": "payload.get(\"account_id\")"
+          },
+          "confidence": 0.9
+        },
+        {
           "category": "unknown",
           "quote": "payload[\"account_id\"]",
           "fix": null,

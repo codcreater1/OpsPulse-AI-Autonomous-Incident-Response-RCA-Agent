@@ -43,7 +43,7 @@ which waits for an **explicit human approval** and is never merged automatically
 | Persistence | PostgreSQL/Neon via SQLAlchemy 2, Alembic migrations, failure taxonomy (`error_category`) |
 | Observability | Structured JSON logs with incident correlation and secret redaction; Langfuse v4 traces with content masking by default; Prometheus `/metrics` (content-free labels) |
 | Evaluation | 26-case synthetic RCA dataset, deterministic metrics, mock and live modes; labelled retrieval dataset comparing two ranking strategies |
-| Delivery | 187 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
+| Delivery | 199 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
 
 ## Architecture
 
@@ -154,7 +154,8 @@ the total, and the total must reach `QUALITY_THRESHOLD` (default 0.85).
 | `diff_wellformed` | 0.10 | yes | parseable single-file diff whose header is the affected file |
 | `diff_applies` | 0.25 | yes | the diff applies to the retrieved source window |
 | `patch_minimal` | 0.05 | | changed lines within `MAX_PATCH_CHANGED_LINES` |
-| `patch_locality` | 0.10 | | a hunk lands within 30 lines of the failing line |
+| `patch_locality` | 0.05 | | a hunk lands within 30 lines of the failing line |
+| `trace_code_consistency` | 0.05 | yes | the key/attribute named by the error appears on the retrieved failing line (not applicable to dynamic or unparsable lines) |
 | `self_assessment` | 0.05 | | model's own confidence (uncalibrated, low weight, 0 if it asks for review) |
 | `patch_effective` | 0.05 | yes | patch changes more than whitespace |
 
@@ -169,7 +170,8 @@ paraphrases code instead of quoting it; the feedback loop usually fixes that, at
 
 ```bash
 python -m evals.run_rca --mode mock     # deterministic, offline, used in CI
-python -m evals.run_rca --mode live     # real model; needs GROQ_API_KEY (26 cases, up to 3 calls each)
+python -m evals.run_rca --mode live --sleep 20   # real model; needs GROQ_API_KEY (~100-125k tokens per run)
+python -m evals.run_rca --rescore evals/results/<report>.json   # recompute metrics, no model calls
 python -m evals.run_retrieval
 ```
 
@@ -204,22 +206,58 @@ no LLM-as-judge is used):
 | relevant_file_hit_rate | cases whose affected files include a labelled file / cases with labelled files |
 | avg_attempts, latency, tokens, estimated cost | from per-attempt records |
 
-**Results actually obtained** (mock mode, 2026-10-09, `rca-cases-v1`, `quality-gate-v3`):
+**Results actually obtained** (mock mode, 2026-10-09, `rca-cases-v1`, `quality-gate-v4`):
 
 | Metric | Value |
 |---|---|
-| structured_output_validity | 0.938 (30/32) |
+| structured_output_validity | 0.939 (31/33) |
 | category_accuracy | 0.955 (21/22) |
 | evidence_grounding_accuracy | 0.980 (48/49) |
 | unsupported_claim_rate | 0.027 (2/74) |
 | abstention_recall | 0.750 (3/4) |
 | inconclusive_not_accepted_rate | 1.000 (4/4) |
 | false_acceptance_rate | 0.059 (1/17) |
-| avg_attempts | 1.231 |
+| avg_attempts | 1.269 |
 
 These numbers say the gate rejected every fabricated quote, injection-compliant answer and inapplicable patch
-in the scripted set and accepted no inconclusive case. They say **nothing about how good the LLM is** - run live
-mode for that. **No live-mode results are reported here because no Groq key was available while this was built.**
+in the scripted set and accepted no inconclusive case. They say **nothing about how good the LLM is** - see the
+live results below.
+
+### Live results (`openai/gpt-oss-120b` on Groq, 2026-10-09)
+
+Two full runs on the same 26 cases; reports in [`evals/results/`](evals/results). In the second run Groq's
+free-tier daily token quota (200k tokens/day) ran out, so 4 cases were not evaluated; they are excluded from
+the quality metrics and listed in the report. The comparison below uses the **same 22 evaluated cases** for both
+runs.
+
+| Metric (same 22 cases) | prompt v2 + gate v3 | prompt v3 + gate v4 |
+|---|---|---|
+| category_accuracy | 0.61 (11/18) | **0.83** (15/18) |
+| false_acceptance_rate | 0.42 (8/19) | **0.18** (3/17) |
+| abstention_recall (inconclusive cases) | 0.75 (3/4) | **1.00** (4/4) |
+| inconclusive_not_accepted_rate | 0.75 (3/4) | **1.00** (4/4) |
+| evidence_grounding_accuracy | 1.00 (42/42) | 0.98 (41/42) |
+| structured_output_validity (per attempt) | 0.81 (21/26) | **0.61** (20/33) - worse |
+| average attempts per case | 1.18 | **1.50** - more cost |
+
+What the first live run showed, and what changed:
+
+- **The model did not fabricate evidence**: every "observed" quote was verbatim in the retrieved data (50/50).
+- **A real gate gap**: the *contradictory-evidence* case (error `KeyError: 'user_id'`, retrieved line reads
+  `payload["account_id"]` - deploy drift) was accepted with a confident patch. `quality-gate-v4` adds a
+  deterministic *trace/code consistency* check (blocking): if the error names a key or attribute that the
+  retrieved failing line does not use, the analysis is rejected with feedback to report insufficient evidence.
+  It never fails on lines it cannot judge (dynamic keys, unparsable lines). The case is now rejected and the model
+  abstains on retry; the mock dataset replays the live model's original answer as a regression test.
+- **Category confusion** (e.g. a missing env var classified as `missing_key`): `rca-prompt-v3` defines each
+  category by root cause. **Caveat:** the definitions were written after seeing the live failures on this same
+  dataset, so the category gain is optimistic; a held-out set is needed to confirm it.
+- **Trade-off not yet solved:** first attempts are now schema-invalid more often (retries fix them, at ~27% more
+  calls). Each attempt now records the failing schema fields (`schema_error_fields`) to diagnose this in the next
+  run.
+
+Practical note: one full live run costs roughly 100-125k tokens with this model, i.e. about one run per day on
+Groq's free tier. Use `--sleep` to stay under the per-minute limit and `--case` to re-run selected cases.
 
 *An eval-driven change:* the first mock run showed four cases (missing dependency, DB down, pool exhausted,
 missing env var) where a correct, grounded analysis without a patch burned all 3 attempts. `quality-gate-v3`
@@ -445,7 +483,7 @@ stack traces or connection strings. Re-sending a request with the same `incident
 ## Testing and CI
 
 ```bash
-pytest                               # 187 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
+pytest                               # 199 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
 pytest --cov=src --cov=evals         # coverage (87% total at time of writing)
 ruff check src tests evals scripts migrations && ruff format --check src tests evals scripts migrations
 mypy                                 # src/
@@ -525,7 +563,8 @@ pipeline, gate and sandboxed verification - **not** the model's ability. PR crea
 
 ## Roadmap
 
-- Run the live evaluation and publish its report next to the mock baseline; add more real-world-shaped cases.
+- A held-out evaluation set (cases not used while tuning prompt v3) and more real-world-shaped cases.
+- Reduce first-attempt schema errors under prompt v3 (diagnose with `schema_error_fields`).
 - More inbound adapters (Alertmanager, Datadog) and per-tenant allow-lists.
 - PostgreSQL full-text search for candidate selection when histories outgrow the 200-row window; evaluate
   embeddings only if lexical recall proves insufficient on real data.

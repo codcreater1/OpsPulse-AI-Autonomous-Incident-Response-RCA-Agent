@@ -174,6 +174,7 @@ def _analyze_root_cause(state: IncidentState, config: RunnableConfig, model_fact
 
     analysis = extract_json_object(reply.text)
     schema_valid = False
+    schema_error_fields: list[str] = []
     if analysis is None:
         analysis = {"output_error": "the model did not return a valid JSON object"}
     else:
@@ -183,6 +184,8 @@ def _analyze_root_cause(state: IncidentState, config: RunnableConfig, model_fact
         except ValidationError as exc:
             # Keep the raw object: the evaluator turns each schema error into feedback for the next attempt.
             logger.info("analysis reply has %d schema error(s)", exc.error_count())
+            # Field paths and error types only (no content) - diagnosable from metrics and reports.
+            schema_error_fields = [f"{'.'.join(map(str, e['loc']))}:{e['type']}" for e in exc.errors()[:8]]
     remediation = analysis.get("patch_remediation")
     patch = remediation.get("unified_diff") if isinstance(remediation, dict) else None
     patch = patch if isinstance(patch, str) and patch.strip() else None
@@ -194,6 +197,7 @@ def _analyze_root_cause(state: IncidentState, config: RunnableConfig, model_fact
         "output_tokens": reply.output_tokens,
         "valid_json": "output_error" not in analysis,
         "schema_valid": schema_valid,
+        "schema_error_fields": schema_error_fields,
     }
     metrics.record_attempt(attempt)
     analysis["execution_metadata"] = {  # produced in code, never by the LLM
@@ -269,6 +273,7 @@ def _evaluate(state: IncidentState, content: dict[str, Any]) -> Evaluation:
             code_context=state["code_context"],
             historical_matches=state["historical_matches"],
             max_changed_lines=settings.max_patch_changed_lines,
+            error_message=state["error_message"],
         ),
         threshold=settings.quality_threshold,
     )

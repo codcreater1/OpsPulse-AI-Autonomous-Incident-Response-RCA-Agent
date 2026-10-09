@@ -6,6 +6,12 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Added
+- First live evaluations with `openai/gpt-oss-120b` (reports in `evals/results/`).
+- `quality-gate-v4`: blocking trace/code consistency check (catches deploy drift the first live run accepted).
+- `rca-prompt-v3`: root-cause category definitions (category accuracy 0.61 -> 0.83 on the same 22 cases;
+  optimistic, tuned on this dataset; first-attempt schema validity fell 0.81 -> 0.61).
+- Evaluation: provider-blocked cases are excluded from quality metrics and listed; `--rescore`, `--sleep`;
+  per-attempt `schema_error_fields`.
 - Lease heartbeat: workers renew their claim while analysing; default lease 5 min (crash recovery in
   minutes instead of half an hour).
 - Operations runbook (`docs/RUNBOOK.md`) and example Prometheus alert rules, checked with `promtool` in CI.
@@ -28,6 +34,7 @@ All notable changes are listed here. Versions of behaviour-critical components a
 - MIT license, security policy, contributing guide, ADRs, pre-commit hooks, Dependabot.
 
 ### Fixed
+- Default model `llama-3.3-70b-versatile` is no longer served by Groq; default is now `openai/gpt-oss-120b`.
 - CI: restored the `langchain` dependency required by Langfuse's LangChain handler; the handler is now imported
   lazily so a missing tracing integration cannot prevent startup.
 

@@ -113,3 +113,18 @@ def test_retrieval_evaluation_never_leaks_between_repositories():
     data = json.loads(RETRIEVAL_DATASET.read_text(encoding="utf-8"))
     for strategy in ("fingerprint-or-file-v0", "lexical-v1"):
         assert evaluate_strategy(strategy, data, 3)["leaks"] == 0
+
+
+def test_provider_failures_are_excluded_from_quality_metrics_and_listed():
+    ok = _result("missing_key", "missing_key")
+    limited = {
+        **_result("type_error", None),
+        "case_id": "x",
+        "workflow_status": "failed",
+        "error_category": "llm_rate_limited",
+        "gate_passed": False,
+    }
+    m = compute_metrics([ok, limited])
+    assert m["cases_not_evaluated"] == ["x"]
+    assert m["category_accuracy"]["denominator"] == 1 and m["category_accuracy"]["value"] == 1.0
+    assert m["workflow_failure_rate"]["numerator"] == 1  # still visible as an operational failure

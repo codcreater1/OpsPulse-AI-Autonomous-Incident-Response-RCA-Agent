@@ -87,7 +87,23 @@ missing in "uncertainties", leave "unified_diff" empty and set "needs_human_revi
 ## ROOT CAUSE CATEGORY
 "root_cause_category" is exactly one of: """
     + ", ".join(ROOT_CAUSE_CATEGORIES)
-    + """. Use "unknown" when the evidence does not support a category.
+    + """. Classify by the ROOT CAUSE, not by the exception class:
+- null_reference: a value was unexpectedly None/null (includes AttributeError or TypeError raised on None).
+- missing_key: a key the code requires is absent from internal application data (not environment variables,
+  not an external service's response).
+- attribute_error: the code uses an attribute or method that does not exist on a non-None object (typo, wrong
+  object type, changed API).
+- import_error: a module, package or name cannot be imported (missing dependency, renamed symbol), even when the
+  fix is a deployment change.
+- type_error: an operation received a value of the wrong non-None type.
+- configuration_error: missing or invalid configuration, environment variables or settings (including KeyError
+  on os.environ and unparsable setting values).
+- dependency_unavailable: a database, service or queue is unreachable, timing out or out of capacity (connection
+  refused, pool exhausted).
+- invalid_external_response: an external API or upstream returned malformed or unexpectedly shaped content
+  (including missing fields in its payload).
+- logic_error: incorrect program logic (missing base case, off-by-one, wrong assumption about collection size).
+- unknown: the evidence does not support any category.
 
 ## ANALYSIS PROTOCOL
 1. Locate the trigger frame: the application frame closest to the crash (ignore library / runtime frames).

@@ -50,6 +50,7 @@ def _summary(report: dict[str, Any]) -> str:
     lines += [
         "",
         f"- Average attempts: {m['avg_attempts']}",
+        f"- Not evaluated (provider prevented completion): {m['cases_not_evaluated'] or 'none'}",
         f"- LLM latency ms: {m['llm_latency_ms']}  |  case wall ms: {m['case_wall_ms']}",
         f"- Tokens: {m['tokens']}  |  estimated cost USD: {m['estimated_cost_usd']}",
         "",
@@ -65,7 +66,9 @@ def _summary(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def run(mode: str, case_ids: list[str] | None = None, out_dir: pathlib.Path = REPORTS) -> dict[str, Any]:
+def run(
+    mode: str, case_ids: list[str] | None = None, out_dir: pathlib.Path = REPORTS, sleep_seconds: float = 1.0
+) -> dict[str, Any]:
     if mode == "live" and not settings.groq_api_key:
         raise SystemExit("live mode needs GROQ_API_KEY")
     dataset = load_rca_dataset()
@@ -79,7 +82,7 @@ def run(mode: str, case_ids: list[str] | None = None, out_dir: pathlib.Path = RE
             factory = lambda temperature, model=model: model  # noqa: E731
         results.append(run_case(case, factory))
         if mode == "live":
-            time.sleep(1.0)  # stay well inside free-tier rate limits
+            time.sleep(sleep_seconds)  # stay inside provider rate limits (tokens per minute)
     report = {
         "mode": mode,
         "started_at": started.isoformat(),
@@ -111,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mode", choices=("mock", "live"), default="mock")
     parser.add_argument("--case", action="append", dest="cases", help="run only this case id (repeatable)")
     parser.add_argument("--out", type=pathlib.Path, default=REPORTS)
+    parser.add_argument("--sleep", type=float, default=1.0, help="seconds between cases in live mode")
     parser.add_argument(
         "--min",
         action="append",
@@ -118,8 +122,24 @@ def main(argv: list[str] | None = None) -> int:
         metavar="METRIC=VALUE",
         help="fail (exit 1) if a ratio metric is below VALUE",
     )
+    parser.add_argument(
+        "--rescore",
+        type=pathlib.Path,
+        metavar="REPORT_JSON",
+        help="recompute metrics for a saved report with the current definitions (no model calls)",
+    )
     args = parser.parse_args(argv)
-    report = run(args.mode, args.cases, args.out)
+    if args.rescore:
+        report = json.loads(args.rescore.read_text(encoding="utf-8"))
+        report["metrics"] = compute_metrics(
+            report["results"], settings.llm_cost_input_per_mtok, settings.llm_cost_output_per_mtok
+        )
+        report["rescored_at"] = datetime.now(UTC).isoformat()
+        args.rescore.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        args.rescore.with_suffix(".md").write_text(_summary(report), encoding="utf-8")
+        print(_summary(report))
+        return 0
+    report = run(args.mode, args.cases, args.out, args.sleep)
     print(_summary(report))
     print("reports:", *report["paths"], sep="\n  ")
     failures = _check_minimums(report["metrics"], args.min)
