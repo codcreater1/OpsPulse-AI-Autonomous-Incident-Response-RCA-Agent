@@ -107,7 +107,7 @@ class Settings:
 
     # --- LLM (Groq) ---
     groq_api_key: str = field(default_factory=lambda: _env("GROQ_API_KEY"))
-    model_name: str = field(default_factory=lambda: _env("MODEL_NAME", "GROQ_MODEL", default="llama-3.3-70b-versatile"))
+    model_name: str = field(default_factory=lambda: _env("MODEL_NAME", "GROQ_MODEL", default="openai/gpt-oss-120b"))
     llm_timeout_seconds: float = field(default_factory=lambda: _number(("LLM_TIMEOUT_SECONDS",), 60.0, float, 5, 300))
     llm_max_retries: int = field(default_factory=lambda: int(_number(("LLM_MAX_RETRIES",), 2, int, 0, 5)))
     # Optional USD prices per million tokens, used only for cost estimates in evaluation reports.
