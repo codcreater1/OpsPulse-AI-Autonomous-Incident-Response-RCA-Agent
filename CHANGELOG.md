@@ -12,6 +12,8 @@ All notable changes are listed here. Versions of behaviour-critical components a
 - Per-identity rate limiting for incident submission (429 with `Retry-After`).
 - Recovery of incidents left in `processing` by a crashed process (`error_category=interrupted`).
 - Alembic migration 0003 (`incidents.submitted_by`).
+- `GET /incidents` with status/repository filters and keyset pagination.
+- Prometheus `/metrics` (incident outcomes, LLM attempts/latency/tokens, gate decisions, approvals).
 - CI job running migrations (round trip + `alembic check`) and the unit tests on PostgreSQL 16.
 - MIT license, security policy, contributing guide, ADRs, pre-commit hooks, Dependabot.
 

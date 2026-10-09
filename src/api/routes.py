@@ -7,7 +7,8 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.api.auth import Principal, authenticate, rate_limited_reporter, require_role
@@ -15,12 +16,16 @@ from src.api.schemas import (
     ErrorResponse,
     HealthResponse,
     IncidentAccepted,
+    IncidentPage,
     IncidentRequest,
     IncidentResult,
+    IncidentStatus,
+    IncidentSummary,
     RemediationDecision,
 )
 from src.config import settings
 from src.db.client import ping_database
+from src.db.repositories import InvalidCursorError
 from src.services import incident_service
 from src.services.incident_service import DatabaseUnavailableError, IncidentConflictError, IncidentNotFoundError
 from src.services.remediation_service import ApprovalError
@@ -50,6 +55,39 @@ def readyz() -> HealthResponse | JSONResponse:
         body = HealthResponse(status="unavailable", checks={"database": "unavailable"})
         return JSONResponse(status_code=503, content=body.model_dump())
     return HealthResponse(status="ready", checks={"database": "ok"})
+
+
+@router.get("/metrics", tags=["health"], response_class=Response, include_in_schema=True)
+def prometheus_metrics() -> Response:
+    """Prometheus metrics: counters/histograms with status and outcome labels only (no content, no identities)."""
+    if not settings.metrics_enabled:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "metrics disabled")
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+@router.get(
+    "/incidents",
+    response_model=IncidentPage,
+    dependencies=[Depends(authenticate)],
+    tags=["incidents"],
+    responses={**_ERRORS, 400: {"model": ErrorResponse}},
+)
+def list_incidents(
+    status_filter: Annotated[IncidentStatus | None, Query(alias="status")] = None,
+    repo_name: Annotated[str | None, Query(max_length=201)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str | None, Query(max_length=200)] = None,
+) -> IncidentPage:
+    """Newest first. Filter e.g. `?status=awaiting_approval` to find proposals waiting for review."""
+    try:
+        items, next_cursor = incident_service.list_incidents(
+            status_filter, repo_name.lower() if repo_name else None, limit, cursor
+        )
+    except InvalidCursorError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid cursor") from exc
+    except DatabaseUnavailableError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "database unavailable") from exc
+    return IncidentPage(items=[IncidentSummary(**i) for i in items], next_cursor=next_cursor)
 
 
 @router.post(

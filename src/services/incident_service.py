@@ -20,6 +20,7 @@ everything needed to resume (the analysis, the patch, the pending approval) is p
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from datetime import timedelta
 from functools import lru_cache
@@ -28,6 +29,7 @@ from typing import Any, cast
 from langgraph.graph.state import CompiledStateGraph
 from sqlalchemy.exc import SQLAlchemyError
 
+from src import metrics
 from src.agent.graph import build_graph
 from src.agent.parsing import compute_fingerprint
 from src.agent.state import IncidentState, initial_state
@@ -119,9 +121,12 @@ def run_incident_pipeline(
     """
     token = incident_id_var.set(str(incident_id))
     fingerprint = compute_fingerprint(repo_name, error_message, stack_trace)
+    started = time.perf_counter()
     try:
         with incident_trace(str(incident_id), repo_name, fingerprint) as trace:
             result = _run(incident_id, repo_name, error_message, stack_trace, fingerprint)
+            metrics.PIPELINE_SECONDS.observe(time.perf_counter() - started)
+            metrics.record_incident(result["status"], result["error_category"])
             trace.update(
                 output={"status": result["status"], "quality_score": result["quality_score"]},
                 metadata={"attempts": result["iterations"], "error_category": result["error_category"]},
@@ -191,6 +196,15 @@ def process_incident_in_background(
         logger.error("incident %s outcome could not be persisted", incident_id)
 
 
+def list_incidents(
+    status: str | None, repo_name: str | None, limit: int, cursor: str | None
+) -> tuple[list[dict[str, Any]], str | None]:
+    try:
+        return repositories.list_incidents(status, repo_name, limit, cursor)
+    except SQLAlchemyError as exc:
+        raise DatabaseUnavailableError("database unavailable") from exc
+
+
 def get_incident_with_approval(incident_id: uuid.UUID) -> dict[str, Any] | None:
     try:
         row = repositories.get_incident(incident_id)
@@ -226,6 +240,8 @@ def decide_remediation(
         outcome = remediation_service.decide(fix, approval_id, patch_sha256, approve, reviewer, note)
         logger.info("remediation decision applied: approve=%s -> %s", approve, outcome.status)
         _persist_or_raise(incident_id, **_outcome_fields(outcome))
+        metrics.record_decision(approve)
+        metrics.record_incident(outcome.status, outcome.category.value if outcome.category else None)
         return _load(incident_id)
     except SQLAlchemyError as exc:
         raise DatabaseUnavailableError("database unavailable") from exc

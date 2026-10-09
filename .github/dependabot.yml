@@ -16,3 +16,7 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    ignore:
+      # The image must use the Python version CI tests (3.11); move both together, deliberately.
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]

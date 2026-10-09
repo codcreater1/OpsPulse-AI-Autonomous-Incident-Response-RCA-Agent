@@ -16,6 +16,7 @@ from langchain_core.runnables import RunnableConfig
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
+from src import metrics
 from src.agent.evaluation import Evaluation, EvaluationInput, evaluate
 from src.agent.parsing import clean_text, compute_fingerprint, get_trigger_frame, normalize_path, split_embedded_trace
 from src.agent.prompts import RCA_SYSTEM_PROMPT, build_rca_user_prompt
@@ -161,12 +162,14 @@ def _analyze_root_cause(state: IncidentState, config: RunnableConfig, model_fact
     except LLMError as exc:
         category = LLM_CATEGORY.get(exc.category, ErrorCategory.LLM_UNAVAILABLE)
         logger.error("LLM call failed: category=%s", category.value)
+        failed_attempt = {"iteration": iteration, "error_category": category.value}
+        metrics.record_attempt(failed_attempt)
         return {
             "iterations": iteration,
             "workflow_status": "failed",
             "error": str(exc),
             "error_category": category.value,
-            "attempts": [*state["attempts"], {"iteration": iteration, "error_category": category.value}],
+            "attempts": [*state["attempts"], failed_attempt],
         }
 
     analysis = extract_json_object(reply.text)
@@ -192,6 +195,7 @@ def _analyze_root_cause(state: IncidentState, config: RunnableConfig, model_fact
         "valid_json": "output_error" not in analysis,
         "schema_valid": schema_valid,
     }
+    metrics.record_attempt(attempt)
     analysis["execution_metadata"] = {  # produced in code, never by the LLM
         **run_metadata(),
         "iteration": iteration,
@@ -219,6 +223,7 @@ def evaluate_analysis(state: IncidentState) -> Update:
     content = {k: v for k, v in analysis.items() if k not in ("execution_metadata", "evaluation")}
     with observe("evaluation.quality_gate", as_type="evaluator") as span:
         result = _evaluate(state, content)
+        metrics.record_gate(result.passed)
         span.update(metadata={"score": result.score, "passed": result.passed, "attempt": state["iterations"]})
     category: ErrorCategory | None = None
     if result.passed:

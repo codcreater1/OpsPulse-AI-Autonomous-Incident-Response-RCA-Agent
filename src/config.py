@@ -152,6 +152,7 @@ class Settings:
     langfuse_secret_key: str = field(default_factory=lambda: _env("LANGFUSE_SECRET_KEY"))
     langfuse_host: str = field(default_factory=lambda: _env("LANGFUSE_HOST", default="https://cloud.langfuse.com"))
     langfuse_capture_content: bool = field(default_factory=lambda: _bool("LANGFUSE_CAPTURE_CONTENT", False))
+    metrics_enabled: bool = field(default_factory=lambda: _bool("METRICS_ENABLED", True))
     log_level: str = field(default_factory=lambda: _env("LOG_LEVEL", default="INFO").upper())
 
     @property

@@ -112,3 +112,22 @@ class ErrorResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: Literal["ok", "ready", "unavailable"]
     checks: dict[str, str] = Field(default_factory=dict)
+
+
+class IncidentSummary(BaseModel):
+    incident_id: str
+    repo_name: str
+    status: IncidentStatus
+    error_category: str | None = None
+    quality_score: float
+    iterations: int
+    affected_file: str | None = None
+    submitted_by: str | None = None
+    pr_url: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class IncidentPage(BaseModel):
+    items: list[IncidentSummary]
+    next_cursor: str | None = Field(None, description="Pass as `cursor` to get the next (older) page")

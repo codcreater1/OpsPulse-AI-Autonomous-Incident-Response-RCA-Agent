@@ -37,9 +37,9 @@ which waits for an **explicit human approval** and is never merged automatically
 | Quality gate | Deterministic, weighted checks with *blocking* checks: schema, trigger frame, **verbatim evidence quotes**, file grounding, patch applies to retrieved source, locality, size |
 | Remediation | Opt-in; policy-checked single-file diff; **human approval bound to the patch SHA-256 by an authenticated reviewer other than the submitter (four-eyes)**; deterministic branch per failure; duplicate-PR guard; draft PRs |
 | Persistence | PostgreSQL/Neon via SQLAlchemy 2, Alembic migrations, failure taxonomy (`error_category`) |
-| Observability | Structured JSON logs with incident correlation and secret redaction; Langfuse v4 traces with content masking by default |
+| Observability | Structured JSON logs with incident correlation and secret redaction; Langfuse v4 traces with content masking by default; Prometheus `/metrics` (content-free labels) |
 | Evaluation | 26-case synthetic RCA dataset, deterministic metrics, mock and live modes; labelled retrieval dataset comparing two ranking strategies |
-| Delivery | 153 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
+| Delivery | 158 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
 
 ## Architecture
 
@@ -275,6 +275,20 @@ model output) is replaced by `[content omitted: N chars]`. Telemetry failures ar
 processing. *Not verified against a live Langfuse project* (no keys were available); behaviour is covered by
 unit tests with a fake client.
 
+### Metrics
+
+| Metric | Type | Labels |
+|---|---|---|
+| `opspulse_incidents_finished_total` | counter | `status`, `error_category` |
+| `opspulse_pipeline_duration_seconds` | histogram | - |
+| `opspulse_llm_attempts_total` | counter | `outcome` (valid / schema_invalid / malformed / provider_error) |
+| `opspulse_llm_call_duration_seconds` | histogram | - |
+| `opspulse_llm_tokens_total` | counter | `direction` (input / output, as reported by the provider) |
+| `opspulse_quality_gate_evaluations_total` | counter | `result` (passed / rejected) |
+| `opspulse_remediation_decisions_total` | counter | `decision` |
+
+Labels never contain repository names, identities, paths or error text. Counters are per process.
+
 ## Setup
 
 Requirements: Python 3.11+, a PostgreSQL database (Neon works), a Groq API key. GitHub and Langfuse are optional.
@@ -328,7 +342,9 @@ For Neon, remove the `db` service and set `DATABASE_URL` in `.env`.
 
 ## API
 
-`GET /healthz` (liveness, public) · `GET /readyz` (database check, public, no details) · interactive docs at `/docs`.
+`GET /healthz` (liveness, public) · `GET /readyz` (database check, public, no details) · `GET /metrics`
+(Prometheus; public unless `METRICS_ENABLED=false`) · `GET /incidents?status=awaiting_approval&limit=20`
+(newest first, keyset `cursor` pagination) · interactive docs at `/docs`.
 
 ```bash
 curl -X POST "http://localhost:8000/webhook/incident?wait=true" \
@@ -368,7 +384,7 @@ stack traces or connection strings. Re-sending a request with the same `incident
 ## Testing and CI
 
 ```bash
-pytest                               # 153 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
+pytest                               # 158 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
 pytest --cov=src --cov=evals         # coverage (86% total at time of writing)
 ruff check src tests evals scripts migrations && ruff format --check src tests evals scripts migrations
 mypy                                 # src/

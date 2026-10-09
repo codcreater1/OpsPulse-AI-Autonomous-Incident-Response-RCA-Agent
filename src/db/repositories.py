@@ -6,11 +6,12 @@ so one repository's incidents can never be offered as context for another.
 
 from __future__ import annotations
 
+import base64
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import CursorResult, select, update
+from sqlalchemy import CursorResult, and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from src.db.client import session_scope
@@ -128,6 +129,57 @@ def get_incident(incident_id: uuid.UUID) -> dict[str, Any] | None:
     with session_scope() as session:
         row = session.get(Incident, incident_id)
         return incident_to_dict(row) if row else None
+
+
+class InvalidCursorError(ValueError):
+    pass
+
+
+def _encode_cursor(row: Incident) -> str:
+    raw = f"{_aware(row.created_at).isoformat()}|{row.id}"
+    return base64.urlsafe_b64encode(raw.encode()).decode()
+
+
+def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
+    try:
+        created, ident = base64.urlsafe_b64decode(cursor.encode()).decode().split("|")
+        return datetime.fromisoformat(created), uuid.UUID(ident)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise InvalidCursorError("invalid cursor") from exc
+
+
+def list_incidents(
+    status: str | None, repo_name: str | None, limit: int, cursor: str | None
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Newest first, keyset-paginated on (created_at, id) so pages stay stable while new incidents arrive."""
+    stmt = select(Incident).order_by(Incident.created_at.desc(), Incident.id.desc()).limit(limit + 1)
+    if status:
+        stmt = stmt.where(Incident.status == status)
+    if repo_name:
+        stmt = stmt.where(Incident.repo_name == repo_name)
+    if cursor:
+        created, ident = _decode_cursor(cursor)
+        stmt = stmt.where(or_(Incident.created_at < created, and_(Incident.created_at == created, Incident.id < ident)))
+    with session_scope() as session:
+        rows = list(session.scalars(stmt))
+        next_cursor = _encode_cursor(rows[limit - 1]) if len(rows) > limit else None
+        return [incident_summary(r) for r in rows[:limit]], next_cursor
+
+
+def incident_summary(row: Incident) -> dict[str, Any]:
+    return {
+        "incident_id": str(row.id),
+        "repo_name": row.repo_name,
+        "status": row.status,
+        "error_category": row.error_category,
+        "quality_score": row.quality_score,
+        "iterations": row.iterations,
+        "affected_file": row.affected_file,
+        "submitted_by": row.submitted_by,
+        "pr_url": row.pr_url,
+        "created_at": _iso(_aware(row.created_at)),
+        "updated_at": _iso(_aware(row.updated_at)),
+    }
 
 
 # ------------------------------------------------------------------ history
