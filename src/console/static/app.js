@@ -6,7 +6,7 @@ const KEY_STORAGE = "opspulse.apiKey";
 const STATUS_TONE = {
   awaiting_approval: "s-warn", needs_review: "s-warn", processing: "s-neutral", analysis_ready: "s-ok",
   pr_created: "s-ok", pr_skipped_duplicate: "s-ok", remediation_rejected: "s-neutral", pr_failed: "s-bad",
-  failed: "s-bad",
+  failed: "s-bad", queued: "s-neutral",
 };
 
 const $ = (id) => document.getElementById(id);

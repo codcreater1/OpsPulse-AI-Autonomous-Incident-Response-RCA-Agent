@@ -6,7 +6,7 @@ import logging
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy.exc import SQLAlchemyError
@@ -107,11 +107,13 @@ def list_incidents(
 )
 def submit_incident(
     payload: IncidentRequest,
-    background_tasks: BackgroundTasks,
     principal: Annotated[Principal, Depends(rate_limited_reporter)],
     wait: bool = Query(False, description="Run the analysis synchronously and return the full result"),
 ) -> IncidentAccepted | JSONResponse:
-    """Accept an incident report (roles: reporter, reviewer, admin). Runs in the background unless `wait=true`."""
+    """Accept an incident report (roles: reporter, reviewer, admin).
+
+    The incident is queued and analysed by a worker (poll `GET /incidents/{id}`), or synchronously with `wait=true`.
+    """
     if not settings.is_repository_allowed(payload.repo_name):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "repository is not in ALLOWED_REPOSITORIES")
     incident_id = payload.incident_id or uuid.uuid4()
@@ -129,20 +131,15 @@ def submit_incident(
         return JSONResponse(status_code=200, content=IncidentResult(**row).model_dump(mode="json"))
     if wait:
         try:
+            if not incident_service.claim_for_inline_run(incident_id):  # a worker was faster
+                return IncidentAccepted(incident_id=str(incident_id), status="processing")
             result = incident_service.run_incident_pipeline(
                 incident_id, payload.repo_name, payload.error_message, payload.stack_trace
             )
         except DatabaseUnavailableError as exc:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "database unavailable") from exc
         return JSONResponse(status_code=200, content=IncidentResult(**result).model_dump(mode="json"))
-    background_tasks.add_task(
-        incident_service.process_incident_in_background,
-        incident_id,
-        payload.repo_name,
-        payload.error_message,
-        payload.stack_trace,
-    )
-    return IncidentAccepted(incident_id=str(incident_id), status="processing")
+    return IncidentAccepted(incident_id=str(incident_id), status="queued")
 
 
 @router.get(

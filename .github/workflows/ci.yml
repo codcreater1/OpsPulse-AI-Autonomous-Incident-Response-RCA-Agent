@@ -118,5 +118,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - name: Compose file is valid
+        run: docker compose config --quiet
+
       - name: Build
         run: docker build -t opspulse-ai:ci .

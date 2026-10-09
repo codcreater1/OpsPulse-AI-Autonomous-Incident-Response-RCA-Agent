@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 IncidentStatus = Literal[
+    "queued",
     "processing",
     "failed",
     "needs_review",
@@ -85,6 +86,7 @@ class IncidentResult(BaseModel):
     error_category: str | None = Field(None, description="Failure / partial-result category (src/errors.py)")
     error_message: str
     submitted_by: str | None = Field(None, description="Authenticated identity that submitted the incident")
+    job_attempts: int = Field(0, description="How many times a worker claimed this incident")
     affected_file: str | None = None
     quality_score: float = Field(description="Deterministic rubric score (0-1). Not a probability of correctness.")
     iterations: int = Field(description="Number of completed LLM analysis attempts")

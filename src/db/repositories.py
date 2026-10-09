@@ -11,7 +11,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import CursorResult, and_, or_, select, update
+from sqlalchemy import CursorResult, and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from src.db.client import session_scope
@@ -48,6 +48,7 @@ def incident_to_dict(row: Incident) -> dict[str, Any]:
         "error_category": row.error_category,
         "error_message": row.error_message,
         "submitted_by": row.submitted_by,
+        "job_attempts": row.job_attempts,
         "affected_file": row.affected_file,
         "quality_score": row.quality_score,
         "iterations": row.iterations,
@@ -100,7 +101,7 @@ def create_incident(
                 fingerprint=fingerprint,
                 error_message=error_message,
                 stack_trace=stack_trace,
-                status="processing",
+                status="queued",
                 submitted_by=submitted_by,
             )
             session.add(row)
@@ -231,16 +232,83 @@ def find_similar_incidents(query: HistoryQuery, exclude_id: str | None = None, l
     return to_prompt_records(rank_lexical(query, load_history_candidates(query.repo_name, exclude_id), limit))
 
 
-def fail_stale_processing(older_than: timedelta, reason: str, category: str) -> int:
-    """Mark incidents stuck in `processing` (e.g. the worker process died) as failed. Returns the count."""
-    cutoff = datetime.now(UTC) - older_than
+# ------------------------------------------------------------------ job queue
+#
+# The incidents table doubles as a durable queue: `queued` rows are claimed with a compare-and-set update
+# (status queued -> processing), which works on PostgreSQL and SQLite and lets several workers run safely.
+# A claim is a lease; if the worker dies, the lease expires and the incident is queued again (bounded).
+
+
+def claim_incident(incident_id: uuid.UUID, lease: timedelta) -> bool:
+    """Atomically move one `queued` incident to `processing` for this worker. False if someone else won."""
+    now = datetime.now(UTC)
     with session_scope() as session:
         result: CursorResult[Any] = session.execute(  # type: ignore[assignment]
             update(Incident)
-            .where(Incident.status == "processing", Incident.updated_at < cutoff)
-            .values(status="failed", status_reason=reason, error_category=category, updated_at=datetime.now(UTC))
+            .where(Incident.id == incident_id, Incident.status == "queued")
+            .values(
+                status="processing",
+                job_attempts=Incident.job_attempts + 1,
+                lease_expires_at=now + lease,
+                updated_at=now,
+            )
         )
-        return result.rowcount
+        return result.rowcount == 1
+
+
+def claim_next(lease: timedelta, scan: int = 10) -> dict[str, Any] | None:
+    """Claim the oldest queued incident. Returns the job (id, repo, error, trace, attempts) or None if empty."""
+    stmt = select(Incident.id).where(Incident.status == "queued").order_by(Incident.created_at).limit(scan)
+    with session_scope() as session:
+        candidates = list(session.scalars(stmt))
+    for incident_id in candidates:  # another worker may win a race for any single row; try the next one
+        if claim_incident(incident_id, lease):
+            with session_scope() as session:
+                row = session.get(Incident, incident_id)
+                if row is not None:
+                    return {
+                        "incident_id": row.id,
+                        "repo_name": row.repo_name,
+                        "error_message": row.error_message,
+                        "stack_trace": row.stack_trace,
+                        "job_attempts": row.job_attempts,
+                    }
+    return None
+
+
+def requeue_expired(max_attempts: int, lease: timedelta, reason: str, category: str) -> tuple[int, int]:
+    """Return expired `processing` claims to the queue, or fail them after `max_attempts` claims.
+
+    Rows without a lease (created before migration 0004) count as expired once they are older than `lease`.
+    Returns (requeued, failed).
+    """
+    now = datetime.now(UTC)
+    expired = and_(
+        Incident.status == "processing",
+        or_(
+            Incident.lease_expires_at < now,
+            and_(Incident.lease_expires_at.is_(None), Incident.updated_at < now - lease),
+        ),
+    )
+    with session_scope() as session:
+        failed: CursorResult[Any] = session.execute(  # type: ignore[assignment]
+            update(Incident)
+            .where(expired, Incident.job_attempts >= max_attempts)
+            .values(
+                status="failed", status_reason=reason, error_category=category, lease_expires_at=None, updated_at=now
+            )
+        )
+        requeued: CursorResult[Any] = session.execute(  # type: ignore[assignment]
+            update(Incident)
+            .where(expired, Incident.job_attempts < max_attempts)
+            .values(status="queued", lease_expires_at=None, updated_at=now)
+        )
+        return requeued.rowcount, failed.rowcount
+
+
+def queue_depth() -> int:
+    with session_scope() as session:
+        return session.scalar(select(func.count()).select_from(Incident).where(Incident.status == "queued")) or 0
 
 
 def find_recent_pr(repo_name: str, fingerprint: str, hours: int = 24) -> str | None:

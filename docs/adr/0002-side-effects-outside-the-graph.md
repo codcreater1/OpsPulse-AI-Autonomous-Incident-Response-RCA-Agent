@@ -23,5 +23,7 @@ benefit.
 ## Consequences
 
 - Retries cannot cause duplicate side effects; approval resumes survive restarts because they are plain rows.
-- An analysis interrupted by a process crash is not resumed; it is marked `failed/interrupted` at the next
-  startup and must be re-submitted. Durable execution (a queue, or a PostgreSQL checkpointer) is on the roadmap.
+- Since migration 0004 incidents go through a durable queue with leased claims: an analysis interrupted by a
+  crash is re-queued and restarts from the beginning (bounded by `MAX_JOB_ATTEMPTS`). It does not resume
+  mid-graph; a checkpointer would only save the LLM calls already made, which was not judged worth a second
+  source of truth.

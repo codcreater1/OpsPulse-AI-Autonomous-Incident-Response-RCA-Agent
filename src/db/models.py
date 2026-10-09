@@ -28,7 +28,10 @@ class Base(DeclarativeBase):
 
 class Incident(Base):
     __tablename__ = "incidents"
-    __table_args__ = (Index("ix_incidents_repo_fingerprint", "repo_name", "fingerprint"),)
+    __table_args__ = (
+        Index("ix_incidents_repo_fingerprint", "repo_name", "fingerprint"),
+        Index("ix_incidents_status_created", "status", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     fingerprint: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
@@ -41,13 +44,16 @@ class Incident(Base):
     quality_score: Mapped[float] = mapped_column("confidence_score", Float, nullable=False, default=0.0)
     iterations: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # See src/services/incident_service.py for the status lifecycle.
-    status: Mapped[str] = mapped_column(String(32), index=True, nullable=False, default="processing")
+    status: Mapped[str] = mapped_column(String(32), index=True, nullable=False, default="queued")
     pr_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     pr_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     pr_branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status_reason: Mapped[str | None] = mapped_column("failure_reason", Text, nullable=True)
     error_category: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)  # migration 0002
     submitted_by: Mapped[str | None] = mapped_column(String(100), nullable=True)  # migration 0003
+    # Job queue (migration 0004): how often a worker claimed the incident, and until when its claim is valid.
+    job_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False, index=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False

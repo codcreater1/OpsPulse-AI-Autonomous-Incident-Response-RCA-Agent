@@ -18,8 +18,7 @@ from src.console import mount_console, security_headers
 from src.db.client import ping_database
 from src.integrations.observability import flush_traces
 from src.logging_config import configure_logging
-from src.services import incident_service
-from src.services.incident_service import DatabaseUnavailableError
+from src.worker import Worker
 
 configure_logging(settings.log_level)
 logger = logging.getLogger("opspulse")
@@ -48,21 +47,21 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         logger.error("database not reachable at startup (%s); continuing, readiness will fail", type(exc).__name__)
     if not settings.api_identities and not settings.allow_unauthenticated:
         logger.error("no API keys configured (API_KEYS / API_KEY): incident endpoints will refuse requests (503)")
-    try:
-        recovered = incident_service.recover_interrupted_incidents()
-        if recovered:
-            logger.warning("marked %d interrupted incident(s) as failed", recovered)
-    except DatabaseUnavailableError:
-        logger.error("could not check for interrupted incidents (database unavailable)")
+    worker = Worker() if settings.embedded_worker else None
+    if worker:
+        worker.start_in_thread()
     if not settings.allowed_repositories:
         logger.warning("ALLOWED_REPOSITORIES is empty: every incident will be rejected (403)")
     logger.info(
-        "OpsPulse AI %s ready (model=%s, remediation=%s)",
+        "OpsPulse AI %s ready (model=%s, remediation=%s, embedded worker=%s)",
         AGENT_VERSION,
         settings.model_name,
         "enabled" if settings.enable_github_remediation else "disabled",
+        settings.embedded_worker,
     )
     yield
+    if worker:
+        worker.stop()
     flush_traces()
 
 

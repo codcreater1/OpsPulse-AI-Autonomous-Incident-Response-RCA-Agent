@@ -1,4 +1,13 @@
-# Local stack: the API plus a throwaway PostgreSQL. For Neon, drop the `db` service and set DATABASE_URL in .env.
+# Local stack: API, a separate queue worker and a throwaway PostgreSQL.
+# For Neon, drop the `db` service and set DATABASE_URL in .env.
+# Scale analysis throughput with:  docker compose up --scale worker=3
+x-app: &app
+  build: .
+  env_file:
+    - path: .env
+      required: false
+  restart: unless-stopped
+
 services:
   db:
     image: postgres:16-alpine
@@ -15,18 +24,27 @@ services:
       retries: 10
 
   api:
-    build: .
-    env_file:
-      - path: .env
-        required: false
+    <<: *app
     environment:
       DATABASE_URL: postgresql://opspulse:opspulse-local-only@db:5432/opspulse
+      EMBEDDED_WORKER: "false"
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
-    restart: unless-stopped
+
+  worker:
+    <<: *app
+    # Migrations are applied by the api container; the worker only polls the queue.
+    command: ["python", "-m", "src.worker"]
+    environment:
+      DATABASE_URL: postgresql://opspulse:opspulse-local-only@db:5432/opspulse
+    healthcheck:
+      disable: true
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   pgdata:

@@ -51,6 +51,7 @@ def main() -> int:
         incident_service.submit_incident(
             incident_id, case.repo_name, case.error_message, case.stack_trace, submitted_by="demo-reporter"
         )
+        incident_service.claim_for_inline_run(incident_id)  # take it off the queue, as `wait=true` does
         result = incident_service.run_incident_pipeline(
             incident_id, case.repo_name, case.error_message, case.stack_trace, graph=graph
         )

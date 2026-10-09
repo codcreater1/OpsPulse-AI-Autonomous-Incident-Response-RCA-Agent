@@ -1,18 +1,11 @@
-"""Identity configuration, role checks, rate limiting and recovery of interrupted incidents."""
+"""Identity configuration, role checks and rate limiting."""
 
 import hashlib
-import uuid
-from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import update
 
 from src.api.auth import SlidingWindowLimiter
 from src.config import ConfigError, _identities
-from src.db import repositories
-from src.db.client import session_scope
-from src.db.models import Incident
-from src.services import incident_service
 from tests.unit.conftest import REPORTER_HEADERS
 from tests.unit.factories import incident_payload, make_analysis
 
@@ -68,16 +61,3 @@ def test_sliding_window_frees_slots_after_a_minute():
     assert limiter.check("b", 1, now=30.0) is None  # limits are per identity
     assert limiter.check("a", 1, now=60.0) is None
     assert limiter.check("a", 0, now=60.0) is None  # 0 disables
-
-
-def test_interrupted_incidents_are_failed_on_recovery():
-    stuck, fresh = uuid.uuid4(), uuid.uuid4()
-    for incident_id in (stuck, fresh):
-        repositories.create_incident(incident_id, "o/r", "f" * 64, "TypeError", "")
-    with session_scope() as session:
-        session.execute(
-            update(Incident).where(Incident.id == stuck).values(updated_at=datetime.now(UTC) - timedelta(hours=2))
-        )
-    assert incident_service.recover_interrupted_incidents() == 1
-    assert repositories.get_incident(stuck)["error_category"] == "interrupted"
-    assert repositories.get_incident(fresh)["status"] == "processing"

@@ -107,9 +107,11 @@ def test_llm_outage_is_persisted_as_failed(client, source_fetch):
 
 
 def test_async_submission_then_poll(client, fake_llm, source_fetch):
+    from src.worker import Worker
+
     fake_llm([make_analysis()])
     resp = submit(client, wait=False)
-    assert resp.status_code == 202 and resp.json()["status"] == "processing"
-    # TestClient runs background tasks before returning, so the result is already stored.
+    assert resp.status_code == 202 and resp.json()["status"] == "queued"
+    assert Worker().run_once()
     polled = client.get(f"/incidents/{resp.json()['incident_id']}", headers=API_HEADERS).json()
     assert polled["status"] == "analysis_ready"

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
 INCIDENTS = Counter(
     "opspulse_incidents_finished_total", "Incidents that reached a final status", ["status", "error_category"]
@@ -24,6 +24,8 @@ LLM_SECONDS = Histogram(
 )
 LLM_TOKENS = Counter("opspulse_llm_tokens_total", "Provider-reported tokens", ["direction"])
 QUALITY_GATE = Counter("opspulse_quality_gate_evaluations_total", "Quality-gate decisions", ["result"])
+QUEUE_DEPTH = Gauge("opspulse_queue_depth", "Incidents waiting in the queue (sampled by the worker)")
+JOBS_RECOVERED = Counter("opspulse_jobs_recovered_total", "Expired worker claims", ["outcome"])
 DECISIONS = Counter("opspulse_remediation_decisions_total", "Human remediation decisions", ["decision"])
 
 

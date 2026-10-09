@@ -33,7 +33,7 @@ which waits for an **explicit human approval** and is never merged automatically
 | Area | Implemented |
 |---|---|
 | Ingestion | `POST /webhook/incident` with validation, size limits, role-based API keys (fail-closed, stored as SHA-256), per-identity rate limit, repository allow-list, idempotent client-supplied `incident_id` |
-| Orchestration | Compiled LangGraph `StateGraph`, one typed state contract, bounded retry loop (`MAX_ANALYSIS_ITERATIONS`) |
+| Orchestration | Compiled LangGraph `StateGraph`, one typed state contract, bounded retry loop (`MAX_ANALYSIS_ITERATIONS`); durable PostgreSQL-backed job queue with leased claims and any number of workers |
 | Context | Stack-trace parsing (Python, JS, Java, Go), GitHub source window around the failing line, ranked same-repository history |
 | Analysis | Groq (`llama-3.3-70b-versatile` by default) in JSON mode, validated by a Pydantic schema; every evidence item labelled *observed / inference / hypothesis* |
 | Quality gate | Deterministic, weighted checks with *blocking* checks: schema, trigger frame, **verbatim evidence quotes**, file grounding, patch applies to retrieved source, locality, size |
@@ -42,7 +42,7 @@ which waits for an **explicit human approval** and is never merged automatically
 | Persistence | PostgreSQL/Neon via SQLAlchemy 2, Alembic migrations, failure taxonomy (`error_category`) |
 | Observability | Structured JSON logs with incident correlation and secret redaction; Langfuse v4 traces with content masking by default; Prometheus `/metrics` (content-free labels) |
 | Evaluation | 26-case synthetic RCA dataset, deterministic metrics, mock and live modes; labelled retrieval dataset comparing two ranking strategies |
-| Delivery | 163 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
+| Delivery | 170 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
 
 ## Architecture
 
@@ -96,6 +96,12 @@ Design decisions are recorded in [`docs/adr/`](docs/adr): the deterministic gate
 Keeping DB writes and GitHub calls in the service layer, after the graph finishes, makes it impossible for a
 retry to open a second PR.
 
+**Durable queue.** Submitted incidents are `queued` rows. Workers claim one with a compare-and-set update
+(`queued -> processing`) that also sets a lease (`JOB_LEASE_SECONDS`, default 30 min, longer than the slowest
+possible analysis). If a worker dies, its lease expires and the incident is queued again; after
+`MAX_JOB_ATTEMPTS` claims it fails as `interrupted`. The same mechanism works on PostgreSQL and SQLite, and any
+number of workers can run.
+
 **Why no LangGraph checkpointer:** the graph runs to completion inside one request (seconds to a minute). The
 only long pause - waiting for a human - happens *after* the graph, and everything needed to resume (analysis,
 patch, pending approval) is already persisted in PostgreSQL. A checkpointer would add a second source of
@@ -120,8 +126,9 @@ Persisted incident `status` (with `error_category` explaining partial results / 
 
 | Status | Meaning |
 |---|---|
-| `processing` | accepted, analysis running |
-| `failed` | no usable analysis (`llm_*`, `internal_error`, `interrupted` - the process stopped mid-analysis) |
+| `queued` | accepted, waiting for a worker |
+| `processing` | claimed by a worker (lease), analysis running |
+| `failed` | no usable analysis (`llm_*`, `internal_error`, `interrupted` - workers stopped mid-analysis `MAX_JOB_ATTEMPTS` times) |
 | `needs_review` | analysis stored but not accepted (`retry_budget_exhausted`, `insufficient_evidence`, `no_code_fix`, `source_unavailable`, `malformed_model_output`, `remediation_policy_violation`) |
 | `analysis_ready` | accepted; remediation disabled or no token (`remediation_skipped`) |
 | `awaiting_approval` | accepted; a PR proposal waits for a human decision |
@@ -355,8 +362,12 @@ A database created by the first release (before Alembic): run `alembic stamp 000
 **Docker**
 
 ```bash
-docker compose up --build    # API on :8000 plus a local PostgreSQL; migrations run on container start
+docker compose up --build                    # API on :8000, one queue worker, local PostgreSQL
+docker compose up --build --scale worker=3   # more analysis throughput
 ```
+
+The API container applies migrations on start; workers (`python -m src.worker`) only poll the queue. Without
+Compose, the API runs an embedded worker thread (`EMBEDDED_WORKER=true`, default).
 
 For Neon, remove the `db` service and set `DATABASE_URL` in `.env`.
 
@@ -374,7 +385,7 @@ curl -X POST "http://localhost:8000/webhook/incident?wait=true" \
        "stack_trace": "Traceback (most recent call last):\n  File \"/app/src/app.py\", line 6, in load_user\n    name = profile[\"name\"]\nTypeError: '\''NoneType'\'' object is not subscriptable"}'
 ```
 
-Without `wait=true` the endpoint returns `202 {"incident_id": "...", "status": "processing"}`; poll
+Without `wait=true` the endpoint returns `202 {"incident_id": "...", "status": "queued"}`; a worker picks it up; poll
 `GET /incidents/{id}`. Shape of a result (abridged; `<...>` are placeholders, not measured values):
 
 ```json
@@ -404,7 +415,7 @@ stack traces or connection strings. Re-sending a request with the same `incident
 ## Testing and CI
 
 ```bash
-pytest                               # 163 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
+pytest                               # 170 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
 pytest --cov=src --cov=evals         # coverage (86% total at time of writing)
 ruff check src tests evals scripts migrations && ruff format --check src tests evals scripts migrations
 mypy                                 # src/
@@ -465,8 +476,9 @@ pipeline, gate and sandboxed verification - **not** the model's ability. PR crea
 - **Untested against live services:** Groq, GitHub branch/PR creation, Neon and Langfuse were exercised only
   through fakes. PostgreSQL is covered by the CI job (service container), and the Docker image builds in CI but
   has not been run end to end with Compose.
-- Background processing uses FastAPI `BackgroundTasks`: an analysis interrupted by a crash is not resumed; it is
-  marked `failed/interrupted` at the next startup and must be re-submitted.
+- The queue lives in the `incidents` table and is polled (default every second); it is meant for tens of
+  incidents per minute, not for high-throughput streaming. An interrupted analysis restarts from the beginning
+  (no mid-graph checkpoint), so a crash costs the LLM calls already made.
 - Single tenant: all identities share one repository allow-list; incidents are isolated per repository, not per
   identity. The rate limiter is per process.
 - Path resolution maps runtime paths to repo files by suffix; monorepos with duplicate file names may resolve

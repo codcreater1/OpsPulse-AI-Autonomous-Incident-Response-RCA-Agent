@@ -25,6 +25,7 @@ os.environ.update(
             for name, role, key in (("alice", "reporter", "reporter-key"), ("bob", "reviewer", "reviewer-key"))
         ),
         "RATE_LIMIT_PER_MINUTE": "1000",
+        "EMBEDDED_WORKER": "false",  # tests drive the queue explicitly with Worker().run_once()
         "ALLOW_UNAUTHENTICATED": "false",
         "ALLOWED_REPOSITORIES": "o/r",
         "ENABLE_GITHUB_REMEDIATION": "false",

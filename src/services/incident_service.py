@@ -2,18 +2,21 @@
 
 Incident status lifecycle (persisted in `incidents.status`; `error_category` says why, see src/errors.py):
 
-    processing ──► failed                 no usable analysis (LLM provider error, unexpected exception)
-              ├──► needs_review           gate not passed (budget exhausted / insufficient evidence / no source)
-              │                           or the patch violated remediation policy
-              ├──► analysis_ready         gate passed; PR not attempted (remediation disabled / no token)
-              ├──► awaiting_approval ──► pr_created | pr_skipped_duplicate | pr_failed   (approved)
-              │                     └──► remediation_rejected                             (rejected)
-              ├──► pr_created             (only when REQUIRE_REMEDIATION_APPROVAL=false)
-              ├──► pr_skipped_duplicate
-              └──► pr_failed
+    queued ──► processing ──► failed                 no usable analysis (LLM provider error, crash, interrupted)
+                         ├──► needs_review           gate not passed (budget exhausted / insufficient evidence /
+                         │                           no source / no code fix) or patch policy violated
+                         ├──► analysis_ready         gate passed; PR not attempted (remediation disabled / no token)
+                         ├──► awaiting_approval ──► pr_created | pr_skipped_duplicate | pr_failed   (approved)
+                         │                     └──► remediation_rejected                             (rejected)
+                         ├──► pr_created             (only when REQUIRE_REMEDIATION_APPROVAL=false)
+                         ├──► pr_skipped_duplicate
+                         └──► pr_failed
+
+`queued` incidents are claimed by a worker (src/worker.py) under a lease; a crashed worker's incident is
+re-queued when the lease expires and failed as `interrupted` after MAX_JOB_ATTEMPTS claims.
 
 Side effects (DB writes, PR creation) happen here, never inside graph nodes, so a retried analysis attempt
-cannot open a PR. Workflow state is not checkpointed: the graph runs to completion within one request and
+cannot open a PR. Workflow state is not checkpointed: the graph runs to completion within one claim and
 everything needed to resume (the analysis, the patch, the pending approval) is persisted in PostgreSQL.
 """
 
@@ -65,7 +68,7 @@ def get_graph() -> CompiledStateGraph:
 def submit_incident(
     incident_id: uuid.UUID, repo_name: str, error_message: str, stack_trace: str, submitted_by: str | None = None
 ) -> tuple[dict[str, Any], bool]:
-    """Persist a new `processing` incident, or return the existing one for a repeated delivery."""
+    """Persist a new `queued` incident, or return the existing one for a repeated delivery."""
     fingerprint = compute_fingerprint(repo_name, error_message, stack_trace)
     try:
         row, created = repositories.create_incident(
@@ -195,16 +198,6 @@ def _run(
     return result
 
 
-def process_incident_in_background(
-    incident_id: uuid.UUID, repo_name: str, error_message: str, stack_trace: str
-) -> None:
-    """BackgroundTasks entry point: failures are logged; the row stays `processing` if the DB is down."""
-    try:
-        run_incident_pipeline(incident_id, repo_name, error_message, stack_trace)
-    except DatabaseUnavailableError:
-        logger.error("incident %s outcome could not be persisted", incident_id)
-
-
 def list_incidents(
     status: str | None, repo_name: str | None, limit: int, cursor: str | None
 ) -> tuple[list[dict[str, Any]], str | None]:
@@ -259,14 +252,10 @@ def decide_remediation(
         incident_id_var.reset(token)
 
 
-def recover_interrupted_incidents() -> int:
-    """Fail incidents left in `processing` by a process that died (BackgroundTasks are not durable)."""
+def claim_for_inline_run(incident_id: uuid.UUID) -> bool:
+    """Used by `wait=true`: take the incident off the queue before any worker does."""
     try:
-        return repositories.fail_stale_processing(
-            timedelta(minutes=settings.stale_processing_minutes),
-            "analysis was interrupted (process stopped); re-submit the incident",
-            ErrorCategory.INTERRUPTED.value,
-        )
+        return repositories.claim_incident(incident_id, timedelta(seconds=settings.job_lease_seconds))
     except SQLAlchemyError as exc:
         raise DatabaseUnavailableError("database unavailable") from exc
 

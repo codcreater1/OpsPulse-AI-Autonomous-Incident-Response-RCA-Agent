@@ -1,0 +1,112 @@
+"""Queue worker: claims `queued` incidents and runs the analysis pipeline.
+
+Run inside the API process (EMBEDDED_WORKER=true, default) or as separate processes:
+
+    python -m src.worker
+
+Any number of workers may run against the same database: claims are compare-and-set updates with a lease.
+"""
+
+from __future__ import annotations
+
+import logging
+import signal
+import threading
+from datetime import timedelta
+from types import FrameType
+
+from sqlalchemy.exc import SQLAlchemyError
+
+from src import metrics
+from src.config import settings
+from src.db import repositories
+from src.errors import ErrorCategory
+from src.services import incident_service
+from src.services.incident_service import DatabaseUnavailableError
+
+logger = logging.getLogger(__name__)
+
+MAX_BACKOFF_SECONDS = 30.0
+
+
+class Worker:
+    def __init__(self) -> None:
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self.lease = timedelta(seconds=settings.job_lease_seconds)
+
+    def recover_expired(self) -> tuple[int, int]:
+        requeued, failed = repositories.requeue_expired(
+            settings.max_job_attempts,
+            self.lease,
+            f"analysis was interrupted {settings.max_job_attempts} time(s) (worker stopped); re-submit the incident",
+            ErrorCategory.INTERRUPTED.value,
+        )
+        if requeued or failed:
+            logger.warning("expired claims: %d re-queued, %d failed", requeued, failed)
+            metrics.JOBS_RECOVERED.labels("requeued").inc(requeued)
+            metrics.JOBS_RECOVERED.labels("failed").inc(failed)
+        return requeued, failed
+
+    def run_once(self) -> bool:
+        """Recover expired claims, then process at most one incident. True if an incident was processed."""
+        try:
+            self.recover_expired()
+            job = repositories.claim_next(self.lease)
+            metrics.QUEUE_DEPTH.set(repositories.queue_depth())
+        except SQLAlchemyError as exc:
+            raise DatabaseUnavailableError("database unavailable") from exc
+        if job is None:
+            return False
+        logger.info("claimed incident %s (claim %d)", job["incident_id"], job["job_attempts"])
+        incident_service.run_incident_pipeline(
+            job["incident_id"], job["repo_name"], job["error_message"], job["stack_trace"]
+        )
+        return True
+
+    def run_forever(self) -> None:
+        backoff = settings.worker_poll_seconds
+        while not self._stop.is_set():
+            try:
+                busy = self.run_once()
+                backoff = settings.worker_poll_seconds
+            except DatabaseUnavailableError:
+                logger.error("worker: database unavailable, retrying in %.0fs", backoff)
+                busy = False
+                backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
+            except Exception:  # loop boundary: log and keep serving; the claim's lease re-queues the incident
+                logger.exception("worker iteration failed")
+                busy = False
+            if not busy:
+                self._stop.wait(backoff)
+
+    def start_in_thread(self) -> None:
+        self._thread = threading.Thread(target=self.run_forever, name="opspulse-worker", daemon=True)
+        self._thread.start()
+
+    def stop(self, timeout: float = 5.0) -> None:
+        """Ask the loop to stop. An analysis in progress is not interrupted; its lease covers a hard stop."""
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout)
+
+
+def main() -> int:
+    from src.logging_config import configure_logging
+
+    configure_logging(settings.log_level)
+    worker = Worker()
+
+    def shutdown(signum: int, _frame: FrameType | None) -> None:
+        logger.info("signal %d received, stopping after the current incident", signum)
+        worker.stop(timeout=0)
+
+    signal.signal(signal.SIGINT, shutdown)
+    signal.signal(signal.SIGTERM, shutdown)
+    logger.info("worker started (poll=%.1fs, lease=%ss)", settings.worker_poll_seconds, settings.job_lease_seconds)
+    worker.run_forever()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

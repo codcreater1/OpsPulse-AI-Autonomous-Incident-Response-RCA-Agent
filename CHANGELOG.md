@@ -6,6 +6,9 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Added
+- Durable PostgreSQL-backed job queue (migration 0004): compare-and-set claims with leases, automatic
+  re-queueing of crashed workers' incidents, `python -m src.worker`, Compose `worker` service, queue metrics.
+  Replaces FastAPI BackgroundTasks and the startup "mark interrupted" sweep.
 - Review console at `/console` (strict CSP, textContent-only rendering) and `scripts/seed_demo_data.py`;
   baseline security headers on every response.
 - Role-based API keys (`API_KEYS=name:role:sha256`; reporter / reviewer / admin) and `scripts/make_api_key.py`.
