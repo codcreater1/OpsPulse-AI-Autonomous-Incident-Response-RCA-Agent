@@ -6,6 +6,8 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Added
+- Sentry webhook adapter (`POST /integrations/sentry`): HMAC signature verification, project-to-repository
+  mapping, idempotent per Sentry event, size and rate limits.
 - Durable PostgreSQL-backed job queue (migration 0004): compare-and-set claims with leases, automatic
   re-queueing of crashed workers' incidents, `python -m src.worker`, Compose `worker` service, queue metrics.
   Replaces FastAPI BackgroundTasks and the startup "mark interrupted" sweep.

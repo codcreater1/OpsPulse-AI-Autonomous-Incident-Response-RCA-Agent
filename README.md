@@ -34,6 +34,7 @@ which waits for an **explicit human approval** and is never merged automatically
 |---|---|
 | Ingestion | `POST /webhook/incident` with validation, size limits, role-based API keys (fail-closed, stored as SHA-256), per-identity rate limit, repository allow-list, idempotent client-supplied `incident_id` |
 | Orchestration | Compiled LangGraph `StateGraph`, one typed state contract, bounded retry loop (`MAX_ANALYSIS_ITERATIONS`); durable PostgreSQL-backed job queue with leased claims and any number of workers |
+| Integrations | Sentry issue-alert webhooks (`POST /integrations/sentry`, HMAC-verified, project -> repository mapping, idempotent per event) |
 | Context | Stack-trace parsing (Python, JS, Java, Go), GitHub source window around the failing line, ranked same-repository history |
 | Analysis | Groq (`llama-3.3-70b-versatile` by default) in JSON mode, validated by a Pydantic schema; every evidence item labelled *observed / inference / hypothesis* |
 | Quality gate | Deterministic, weighted checks with *blocking* checks: schema, trigger frame, **verbatim evidence quotes**, file grounding, patch applies to retrieved source, locality, size |
@@ -42,7 +43,7 @@ which waits for an **explicit human approval** and is never merged automatically
 | Persistence | PostgreSQL/Neon via SQLAlchemy 2, Alembic migrations, failure taxonomy (`error_category`) |
 | Observability | Structured JSON logs with incident correlation and secret redaction; Langfuse v4 traces with content masking by default; Prometheus `/metrics` (content-free labels) |
 | Evaluation | 26-case synthetic RCA dataset, deterministic metrics, mock and live modes; labelled retrieval dataset comparing two ranking strategies |
-| Delivery | 170 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
+| Delivery | 185 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
 
 ## Architecture
 
@@ -266,6 +267,25 @@ Enforced in code (`src/services/remediation_service.py`), never by the model:
 *Limitation:* identities are API keys, not people - whoever holds the reviewer key can approve. Use one key per
 person or system and rotate keys you suspect were shared.
 
+## Sentry integration
+
+`POST /integrations/sentry` accepts Sentry Integration Platform webhooks (`event_alert` and `error` resources;
+others return 204). It is designed from Sentry's public webhook documentation and tested with payloads of the
+documented shape - **it has not been exercised against a live Sentry organisation**.
+
+1. In Sentry, create an internal integration with a webhook URL `https://<host>/integrations/sentry`, enable
+   alert-rule actions and/or the `error` resource, and copy its *Client Secret*.
+2. Configure `SENTRY_CLIENT_SECRET` and map Sentry project ids to allow-listed repositories:
+   `SENTRY_PROJECT_REPOS=1234567:your-org/your-repo`.
+3. Add the integration as an action to an issue alert rule.
+
+The request is authenticated by `Sentry-Hook-Signature` (HMAC-SHA256 with the Client Secret). Sentry's own
+sample signs `JSON.stringify(body)`, so both the raw body and its compact JSON form are accepted. Requests over
+1 MB get 413, unmapped projects 422, mapped-but-not-allow-listed repositories 403. The event becomes a
+queued incident submitted by the identity `sentry` (so a human reviewer can approve its remediation);
+`in_app` frames are turned into a Python-style traceback for the parser, and the incident id is derived from
+Sentry's `event_id`, so repeated deliveries return the existing incident instead of analysing it twice.
+
 ## Review console
 
 `GET /console` serves a small dependency-free web UI for reviewers: filter incidents (default: awaiting
@@ -415,7 +435,7 @@ stack traces or connection strings. Re-sending a request with the same `incident
 ## Testing and CI
 
 ```bash
-pytest                               # 170 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
+pytest                               # 185 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
 pytest --cov=src --cov=evals         # coverage (86% total at time of writing)
 ruff check src tests evals scripts migrations && ruff format --check src tests evals scripts migrations
 mypy                                 # src/

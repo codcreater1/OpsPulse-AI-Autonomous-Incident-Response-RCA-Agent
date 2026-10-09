@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from src.api.integrations import router as integrations_router
 from src.api.routes import router
 from src.config import AGENT_VERSION, settings
 from src.console import mount_console, security_headers
@@ -31,6 +32,7 @@ _HTTP_CODES = {
     405: "method_not_allowed",
     409: "conflict",
     429: "rate_limited",
+    413: "payload_too_large",
     422: "validation_error",
     503: "service_unavailable",
 }
@@ -72,6 +74,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(router)
+app.include_router(integrations_router)
 app.middleware("http")(security_headers)
 if settings.console_enabled:
     mount_console(app)

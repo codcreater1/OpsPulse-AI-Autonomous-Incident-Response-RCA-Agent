@@ -73,6 +73,15 @@ class ApiIdentity:
     key_sha256: str
 
 
+def _sentry_projects() -> dict[str, str]:
+    from src.integrations.sentry import parse_project_map
+
+    try:
+        return parse_project_map(os.getenv("SENTRY_PROJECT_REPOS", ""))
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
+
+
 def _identities() -> tuple[ApiIdentity, ...]:
     """API_KEYS="name:role:sha256hex,..." plus the legacy single API_KEY (admin identity "default")."""
     identities = []
@@ -139,6 +148,10 @@ class Settings:
     max_patch_changed_lines: int = field(
         default_factory=lambda: int(_number(("MAX_PATCH_CHANGED_LINES",), 40, int, 1, 400))
     )
+
+    # --- Inbound integrations ---
+    sentry_client_secret: str = field(default_factory=lambda: _env("SENTRY_CLIENT_SECRET"))
+    sentry_project_repos: dict[str, str] = field(default_factory=_sentry_projects)
 
     # --- Workflow ---
     quality_threshold: float = field(

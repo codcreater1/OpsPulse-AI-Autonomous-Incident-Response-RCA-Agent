@@ -25,7 +25,9 @@ os.environ.update(
             for name, role, key in (("alice", "reporter", "reporter-key"), ("bob", "reviewer", "reviewer-key"))
         ),
         "RATE_LIMIT_PER_MINUTE": "1000",
-        "EMBEDDED_WORKER": "false",  # tests drive the queue explicitly with Worker().run_once()
+        "EMBEDDED_WORKER": "false",
+        "SENTRY_CLIENT_SECRET": "sentry-test-secret",
+        "SENTRY_PROJECT_REPOS": "1:o/r,2:other/repo",  # tests drive the queue explicitly with Worker().run_once()
         "ALLOW_UNAUTHENTICATED": "false",
         "ALLOWED_REPOSITORIES": "o/r",
         "ENABLE_GITHUB_REMEDIATION": "false",
