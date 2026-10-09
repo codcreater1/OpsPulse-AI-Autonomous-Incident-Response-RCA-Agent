@@ -24,7 +24,7 @@ which waits for an **explicit human approval** and is never merged automatically
 
 - [Features](#features) · [Architecture](#architecture) · [Workflow and statuses](#workflow-and-statuses)
 - [Quality gate](#quality-gate) · [Evaluation](#evaluation) · [Retrieval](#retrieval)
-- [Human approval](#human-approval-and-remediation-safety) · [Review console](#review-console) · [Observability](#observability-langfuse)
+- [Human approval](#human-approval-and-remediation-safety) · [Sentry](#sentry-integration) · [Review console](#review-console) · [Observability](#observability-langfuse)
 - [Setup](#setup) · [API](#api) · [Testing and CI](#testing-and-ci) · [Demo](#demo)
 - [Security](#security-model) · [Limitations](#known-limitations) · [Roadmap](#roadmap)
 
@@ -49,9 +49,11 @@ which waits for an **explicit human approval** and is never merged automatically
 
 ```mermaid
 flowchart LR
-    Client[Application / alerting] -->|POST /webhook/incident\nX-API-Key| API[FastAPI routes]
-    API --> Svc[incident_service]
-    Svc -->|invoke| Graph
+    Client[Application / alerting] -->|POST /webhook/incident\nX-API-Key| API[FastAPI]
+    Sentry[Sentry alert rule] -->|POST /integrations/sentry\nHMAC signature| API
+    API -->|queued row| DB[(PostgreSQL / Neon)]
+    DB -->|claim with lease| Worker[queue worker x N]
+    Worker -->|invoke| Graph
     subgraph Graph[LangGraph StateGraph - no side effects]
         N1[normalize_incident] --> N2[extract_stack_trace_context]
         N2 --> N3[retrieve_source_context]
@@ -63,15 +65,13 @@ flowchart LR
         N6 --> End2((end))
     end
     N3 -.read only.-> GH[(GitHub API)]
-    N4 -.-> DB[(PostgreSQL / Neon)]
+    N4 -.same repository only.-> DB
     N5 -.-> LLM[Groq]
-    Svc -->|persist once| DB
-    Svc -->|accepted + enabled| Rem[remediation_service]
-    Rem -->|create approval| DB
-    Reviewer[Human reviewer] -->|POST /incidents/id/remediation/decision| API
-    API --> Rem
-    Rem -->|approved: branch + draft PR| GH
+    Worker -->|persist once + approval row| DB
+    Reviewer[Reviewer: /console or API] -->|approve / reject\nreviewer role, four-eyes| API
+    API -->|approved: branch + draft PR| GH
     Graph -.spans.-> LF[Langfuse]
+    API -.-> Prom[Prometheus /metrics]
 ```
 
 | Module | Responsibility |
@@ -83,7 +83,11 @@ flowchart LR
 | `src/agent/evaluation.py` | Deterministic quality gate (pure functions) |
 | `src/retrieval/history.py` | Historical-incident ranking strategies (pure functions) |
 | `src/services/` | Side effects: persistence, remediation policy, approvals |
-| `src/integrations/` | Groq, GitHub, Langfuse boundaries with error classification |
+| `src/worker.py` | Queue worker: leased claims, expiry recovery, backoff (embedded thread or `python -m src.worker`) |
+| `src/api/auth.py`, `src/api/integrations.py` | API-key roles and rate limit; Sentry webhook adapter |
+| `src/console/` | Static review console and security headers |
+| `src/metrics.py` | Prometheus metrics with content-free labels |
+| `src/integrations/` | Groq, GitHub, Langfuse, Sentry boundaries with error classification |
 | `src/db/` | Engine, models, parameterized queries; `migrations/` holds Alembic revisions |
 | `src/versions.py` | Prompt / evaluator / retrieval versions recorded with every analysis and report |
 | `evals/` | Datasets, harness, metrics, runners |
@@ -103,10 +107,10 @@ possible analysis). If a worker dies, its lease expires and the incident is queu
 `MAX_JOB_ATTEMPTS` claims it fails as `interrupted`. The same mechanism works on PostgreSQL and SQLite, and any
 number of workers can run.
 
-**Why no LangGraph checkpointer:** the graph runs to completion inside one request (seconds to a minute). The
+**Why no LangGraph checkpointer:** the graph runs to completion inside one worker claim (seconds to minutes). The
 only long pause - waiting for a human - happens *after* the graph, and everything needed to resume (analysis,
 patch, pending approval) is already persisted in PostgreSQL. A checkpointer would add a second source of
-truth without a demonstrated benefit. This is a deliberate decision, revisited in the roadmap.
+truth without a demonstrated benefit; a crashed claim simply restarts the analysis (see ADR 0002).
 
 ## Workflow and statuses
 
@@ -333,6 +337,8 @@ unit tests with a fake client.
 | `opspulse_llm_tokens_total` | counter | `direction` (input / output, as reported by the provider) |
 | `opspulse_quality_gate_evaluations_total` | counter | `result` (passed / rejected) |
 | `opspulse_remediation_decisions_total` | counter | `decision` |
+| `opspulse_queue_depth` | gauge | - (sampled by the worker) |
+| `opspulse_jobs_recovered_total` | counter | `outcome` (requeued / failed) |
 
 Labels never contain repository names, identities, paths or error text. Counters are per process.
 
@@ -373,7 +379,9 @@ python -m scripts.make_api_key alertmanager reporter   # may submit and read inc
 python -m scripts.make_api_key alice reviewer          # may also approve/reject remediation
 ```
 
-Append the printed `name:role:sha256` entries to `API_KEYS` (comma-separated) and hand each key to its client. GitHub token scopes: *Contents: Read* for analysis; additionally *Contents: Read & write* and
+Append the printed `name:role:sha256` entries to `API_KEYS` (comma-separated) and hand each key to its client.
+
+**GitHub token scopes:** *Contents: Read* for analysis; additionally *Contents: Read & write* and
 *Pull requests: Read & write* for remediation - fine-grained and limited to the allow-listed repositories.
 
 **Database migrations.** The schema is owned by Alembic; the app never creates tables implicitly.
@@ -436,7 +444,7 @@ stack traces or connection strings. Re-sending a request with the same `incident
 
 ```bash
 pytest                               # 185 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
-pytest --cov=src --cov=evals         # coverage (86% total at time of writing)
+pytest --cov=src --cov=evals         # coverage (87% total at time of writing)
 ruff check src tests evals scripts migrations && ruff format --check src tests evals scripts migrations
 mypy                                 # src/
 RUN_LIVE_TESTS=1 pytest tests/integration -v   # opt-in, uses your real .env
@@ -447,7 +455,9 @@ redelivery, stack-trace parsing, diff parsing/application (including multi-file 
 (passing and failing cases, fabricated quotes, unretrieved sources), schema validation, prompt-tag injection,
 graph termination and retry budgets, provider-error classification, DB outages (503, never false success),
 GitHub failures, approval binding/staleness/expiry/double-approval, retrieval ranking and repository isolation,
-Alembic migrations vs. models, Langfuse enabled/disabled/broken, log redaction and the evaluation metrics.
+Alembic migrations vs. models, Langfuse enabled/disabled/broken, log redaction, the evaluation metrics, roles and
+the four-eyes rule, rate limiting, queue claims/lease expiry/worker resilience, Sentry signatures and payload
+translation, listing/pagination, Prometheus labels, and the console's CSP and absence of unsafe DOM sinks.
 
 `.github/workflows/ci.yml` (no secrets, `contents: read`) has three jobs:
 
@@ -455,7 +465,7 @@ Alembic migrations vs. models, Langfuse enabled/disabled/broken, log redaction a
   regression thresholds, retrieval evaluation (fails on any cross-repository leak) and the sandboxed demo;
 - **postgres** - Alembic upgrade/downgrade/upgrade round trip, `alembic check` (models == migrated schema) and
   the unit tests against a PostgreSQL 16 service container;
-- **docker** - builds the image.
+- **docker** - validates the Compose file and builds the image.
 
 The first CI run on GitHub caught a dependency that a stale local virtualenv had hidden (see CHANGELOG); the
 workflow has run green on GitHub since. Contributor workflow: [CONTRIBUTING.md](CONTRIBUTING.md); security:
@@ -481,14 +491,16 @@ pipeline, gate and sandboxed verification - **not** the model's ability. PR crea
   that untrusted text cannot close (`[filtered-tag]`), and the system prompt says they are data. **Authorization
   never depends on the prompt:** repository access, allowed paths, patch shape, approval and duplicate checks are
   enforced in code, so a model that "obeys" an injection still cannot open a PR (tested).
-- Fail-closed API key (constant-time compare); repository allow-list checked at the API and again in the GitHub
-  client; repository names with `.`/`..` segments rejected.
+- Role-based API keys stored as SHA-256 digests (fail-closed, constant-time compare), four-eyes approval,
+  per-identity rate limit; Sentry webhooks authenticated by HMAC; repository allow-list checked at the API and
+  again in the GitHub client; repository names with `.`/`..` segments rejected.
+- Console served with a strict CSP; every response carries `nosniff`, `no-referrer` and `X-Frame-Options: DENY`.
 - No secrets in code; `.env` is git-ignored; config errors name the variable, never the value; JSON logs redact
   GitHub/Groq/Langfuse tokens, bearer tokens and connection-string passwords; third-party HTTP loggers are quieted.
 - GitHub errors are reduced to a category and a short message (no response bodies).
 - **Residual risks:** a sophisticated injection could still bias the *content* of an analysis that a reviewer
-  then trusts; the single shared API key has no per-user identity or rate limiting; the redaction patterns are
-  best effort. If a real credential was ever committed to this repository's history, revoke and rotate it -
+  then trusts; API identities are keys, not people; the rate limiter is per process; the redaction patterns
+  are best effort. If a real credential was ever committed to this repository's history, revoke and rotate it -
   deleting it in a later commit is not enough.
 
 ## Known limitations
@@ -512,8 +524,8 @@ pipeline, gate and sandboxed verification - **not** the model's ability. PR crea
 ## Roadmap
 
 - Run the live evaluation and publish its report next to the mock baseline; add more real-world-shaped cases.
-- Durable job execution (queue or LangGraph checkpointer with a PostgreSQL saver) so in-flight analyses survive
-  restarts.
+- Renew worker leases during long analyses (today the lease is a fixed upper bound).
+- More inbound adapters (Alertmanager, Datadog) and per-tenant allow-lists.
 - PostgreSQL full-text search for candidate selection when histories outgrow the 200-row window; evaluate
   embeddings only if lexical recall proves insufficient on real data.
 - Optional sandboxed execution of the target repository's tests before proposing a PR.
@@ -522,7 +534,7 @@ pipeline, gate and sandboxed verification - **not** the model's ability. PR crea
 
 Developed and tested on Windows with Python 3.11.9 and: fastapi 0.143.0, pydantic 2.14.0, SQLAlchemy 2.1.4,
 alembic 1.20.0, langgraph 1.2.14, langchain-core 1.6.9, langchain-groq 1.1.3, groq 0.37.1, langfuse 4.17.0,
-PyGithub 2.10.0, pytest 9.1.1, ruff 0.16.10, mypy 1.20.2. langfuse and langgraph were the latest releases on
+PyGithub 2.10.0, prometheus-client 0.26.0, pytest 9.1.1, ruff 0.16.10, mypy 1.20.2. langfuse and langgraph were the latest releases on
 PyPI at the time of checking (2026-10-09).
 
 ## License
