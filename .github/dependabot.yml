@@ -8,6 +8,10 @@ updates:
     groups:
       llm-stack:
         patterns: ["langgraph", "langchain*", "groq", "langfuse"]
+    ignore:
+      # langchain-groq 1.1.x requires groq<1.0; lift this once langchain-groq supports groq 1.x.
+      - dependency-name: groq
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
