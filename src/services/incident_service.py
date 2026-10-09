@@ -112,7 +112,11 @@ def _outcome_fields(outcome: RemediationOutcome) -> dict[str, Any]:
 
 
 def run_incident_pipeline(
-    incident_id: uuid.UUID, repo_name: str, error_message: str, stack_trace: str
+    incident_id: uuid.UUID,
+    repo_name: str,
+    error_message: str,
+    stack_trace: str,
+    graph: CompiledStateGraph | None = None,
 ) -> dict[str, Any]:
     """Run the graph, persist the outcome, optionally propose/open a PR. Returns the stored incident.
 
@@ -124,7 +128,7 @@ def run_incident_pipeline(
     started = time.perf_counter()
     try:
         with incident_trace(str(incident_id), repo_name, fingerprint) as trace:
-            result = _run(incident_id, repo_name, error_message, stack_trace, fingerprint)
+            result = _run(incident_id, repo_name, error_message, stack_trace, fingerprint, graph or get_graph())
             metrics.PIPELINE_SECONDS.observe(time.perf_counter() - started)
             metrics.record_incident(result["status"], result["error_category"])
             trace.update(
@@ -139,12 +143,17 @@ def run_incident_pipeline(
 
 
 def _run(
-    incident_id: uuid.UUID, repo_name: str, error_message: str, stack_trace: str, fingerprint: str
+    incident_id: uuid.UUID,
+    repo_name: str,
+    error_message: str,
+    stack_trace: str,
+    fingerprint: str,
+    graph: CompiledStateGraph,
 ) -> dict[str, Any]:
     state = initial_state(str(incident_id), error_message, stack_trace, repo_name)
     try:
         final = cast(
-            IncidentState, get_graph().invoke(state, config=build_run_config(str(incident_id), repo_name, fingerprint))
+            IncidentState, graph.invoke(state, config=build_run_config(str(incident_id), repo_name, fingerprint))
         )
     except Exception:  # background-job boundary: any crash is logged and recorded as `failed`, never swallowed
         logger.exception("workflow crashed")

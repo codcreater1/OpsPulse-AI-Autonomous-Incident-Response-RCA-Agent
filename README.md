@@ -18,11 +18,13 @@ which waits for an **explicit human approval** and is never merged automatically
 
 ---
 
+![Review console with incidents awaiting approval (demo data)](docs/images/console-incidents.jpg)
+
 ## Contents
 
 - [Features](#features) · [Architecture](#architecture) · [Workflow and statuses](#workflow-and-statuses)
 - [Quality gate](#quality-gate) · [Evaluation](#evaluation) · [Retrieval](#retrieval)
-- [Human approval](#human-approval-and-remediation-safety) · [Observability](#observability-langfuse)
+- [Human approval](#human-approval-and-remediation-safety) · [Review console](#review-console) · [Observability](#observability-langfuse)
 - [Setup](#setup) · [API](#api) · [Testing and CI](#testing-and-ci) · [Demo](#demo)
 - [Security](#security-model) · [Limitations](#known-limitations) · [Roadmap](#roadmap)
 
@@ -35,11 +37,12 @@ which waits for an **explicit human approval** and is never merged automatically
 | Context | Stack-trace parsing (Python, JS, Java, Go), GitHub source window around the failing line, ranked same-repository history |
 | Analysis | Groq (`llama-3.3-70b-versatile` by default) in JSON mode, validated by a Pydantic schema; every evidence item labelled *observed / inference / hypothesis* |
 | Quality gate | Deterministic, weighted checks with *blocking* checks: schema, trigger frame, **verbatim evidence quotes**, file grounding, patch applies to retrieved source, locality, size |
+| Review console | `/console`: incident list, evidence, gate breakdown, coloured diff, approve/reject - strict CSP, no `innerHTML` |
 | Remediation | Opt-in; policy-checked single-file diff; **human approval bound to the patch SHA-256 by an authenticated reviewer other than the submitter (four-eyes)**; deterministic branch per failure; duplicate-PR guard; draft PRs |
 | Persistence | PostgreSQL/Neon via SQLAlchemy 2, Alembic migrations, failure taxonomy (`error_category`) |
 | Observability | Structured JSON logs with incident correlation and secret redaction; Langfuse v4 traces with content masking by default; Prometheus `/metrics` (content-free labels) |
 | Evaluation | 26-case synthetic RCA dataset, deterministic metrics, mock and live modes; labelled retrieval dataset comparing two ranking strategies |
-| Delivery | 158 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
+| Delivery | 163 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
 
 ## Architecture
 
@@ -256,6 +259,23 @@ Enforced in code (`src/services/remediation_service.py`), never by the model:
 *Limitation:* identities are API keys, not people - whoever holds the reviewer key can approve. Use one key per
 person or system and rotate keys you suspect were shared.
 
+## Review console
+
+`GET /console` serves a small dependency-free web UI for reviewers: filter incidents (default: awaiting
+approval), open one to see the model's hypothesis, its evidence labelled *observed / inference / hypothesis*
+with the verified quotes, uncertainties, suggested tests, the quality-gate breakdown (blocking checks marked
+`*`) and the coloured patch, then approve or reject. It uses the same API and the same rules (roles,
+four-eyes, patch hash) - it has no privileges of its own.
+
+![Evidence view in the review console (demo data)](docs/images/console-evidence.jpg)
+
+- The API key is kept only in the tab's `sessionStorage`.
+- All API data (which includes LLM output and log text) is rendered with `textContent`; there is no
+  `innerHTML` and no inline script, and the page is served with `Content-Security-Policy: default-src 'none';
+  script-src 'self'; ... frame-ancestors 'none'` (unit-tested). Disable with `CONSOLE_ENABLED=false`.
+- Local demo data: `alembic upgrade head && python -m scripts.seed_demo_data` runs ten evaluation cases
+  through the real service layer with scripted (MOCK) replies. Screenshots above use that data.
+
 ## Observability (Langfuse)
 
 Verified against **langfuse 4.17.0** (the SDK uses OpenTelemetry; the code uses `Langfuse(mask=...)`,
@@ -384,7 +404,7 @@ stack traces or connection strings. Re-sending a request with the same `incident
 ## Testing and CI
 
 ```bash
-pytest                               # 158 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
+pytest                               # 163 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
 pytest --cov=src --cov=evals         # coverage (86% total at time of writing)
 ruff check src tests evals scripts migrations && ruff format --check src tests evals scripts migrations
 mypy                                 # src/

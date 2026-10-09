@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpsPulse Console</title>
+  <link rel="stylesheet" href="/console/static/styles.css">
+  <script src="/console/static/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo" aria-hidden="true"></span>OpsPulse <span class="muted">review console</span></div>
+    <form id="key-form" class="key-form" autocomplete="off">
+      <label for="api-key" class="sr-only">API key</label>
+      <input id="api-key" type="password" placeholder="API key (kept in this tab only)" required>
+      <button type="submit">Connect</button>
+      <button type="button" id="forget-key" class="ghost" hidden>Forget key</button>
+    </form>
+  </header>
+
+  <main>
+    <section id="list-view" class="panel">
+      <div class="panel-head">
+        <h1>Incidents</h1>
+        <div class="filters">
+          <label for="status-filter">Status</label>
+          <select id="status-filter">
+            <option value="awaiting_approval">awaiting approval</option>
+            <option value="">all</option>
+            <option value="needs_review">needs review</option>
+            <option value="analysis_ready">analysis ready</option>
+            <option value="pr_created">PR created</option>
+            <option value="remediation_rejected">rejected</option>
+            <option value="failed">failed</option>
+            <option value="processing">processing</option>
+          </select>
+          <button type="button" id="refresh" class="ghost">Refresh</button>
+        </div>
+      </div>
+      <p id="list-message" class="message" role="status"></p>
+      <table id="incident-table" hidden>
+        <thead>
+          <tr><th>Status</th><th>Repository</th><th>Affected file</th><th>Score</th><th>Attempts</th><th>Submitted</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <button type="button" id="load-more" class="ghost" hidden>Load older</button>
+    </section>
+
+    <section id="detail-view" class="panel" hidden>
+      <button type="button" id="back" class="ghost">&larr; All incidents</button>
+      <div class="detail-head">
+        <h1 id="d-title"></h1>
+        <span id="d-status" class="badge"></span>
+      </div>
+      <dl class="facts">
+        <div><dt>Incident</dt><dd id="d-id" class="mono"></dd></div>
+        <div><dt>Repository</dt><dd id="d-repo"></dd></div>
+        <div><dt>Affected file</dt><dd id="d-file" class="mono"></dd></div>
+        <div><dt>Category</dt><dd id="d-category"></dd></div>
+        <div><dt>Quality score</dt><dd id="d-score" title="Deterministic rubric score, not a probability"></dd></div>
+        <div><dt>Submitted by</dt><dd id="d-submitter"></dd></div>
+      </dl>
+      <p id="d-reason" class="message"></p>
+      <p id="a-message" class="message" role="status"></p>
+
+      <div class="grid">
+        <article class="card">
+          <h2>Root cause <span class="muted">(model hypothesis)</span></h2>
+          <p id="d-root"></p>
+          <h3>Evidence</h3>
+          <ul id="d-evidence" class="evidence"></ul>
+          <h3>Uncertainties</h3>
+          <ul id="d-uncertainties"></ul>
+          <h3>Suggested tests <span class="muted">(not run)</span></h3>
+          <ul id="d-tests"></ul>
+        </article>
+        <article class="card">
+          <h2>Quality gate</h2>
+          <table class="checks"><thead><tr><th>Check</th><th>Score</th><th>Detail</th></tr></thead><tbody id="d-checks"></tbody></table>
+        </article>
+      </div>
+
+      <article class="card">
+        <h2>Proposed patch</h2>
+        <pre id="d-patch" class="diff"></pre>
+      </article>
+
+      <article id="approval" class="card approval" hidden>
+        <h2>Decision</h2>
+        <p class="muted">Approving opens a <strong>draft pull request</strong> for human review. Nothing is merged. You cannot
+          decide on incidents you submitted.</p>
+        <p>Patch SHA-256: <code id="a-sha" class="mono"></code></p>
+        <label for="a-note">Note (optional)</label>
+        <textarea id="a-note" maxlength="2000" rows="2"></textarea>
+        <div class="actions">
+          <button type="button" id="approve">Approve and open PR</button>
+          <button type="button" id="reject" class="danger">Reject</button>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

@@ -14,6 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.api.routes import router
 from src.config import AGENT_VERSION, settings
+from src.console import mount_console, security_headers
 from src.db.client import ping_database
 from src.integrations.observability import flush_traces
 from src.logging_config import configure_logging
@@ -72,6 +73,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(router)
+app.middleware("http")(security_headers)
+if settings.console_enabled:
+    mount_console(app)
 
 
 def _error(status_code: int, code: str, message: str) -> JSONResponse:

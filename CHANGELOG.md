@@ -6,6 +6,8 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Added
+- Review console at `/console` (strict CSP, textContent-only rendering) and `scripts/seed_demo_data.py`;
+  baseline security headers on every response.
 - Role-based API keys (`API_KEYS=name:role:sha256`; reporter / reviewer / admin) and `scripts/make_api_key.py`.
 - Four-eyes rule: the identity that submitted an incident cannot decide its remediation; the approver is the
   authenticated identity (no longer a self-declared name).
