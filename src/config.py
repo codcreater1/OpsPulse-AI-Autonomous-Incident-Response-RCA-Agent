@@ -130,10 +130,10 @@ class Settings:
     rate_limit_per_minute: int = field(
         default_factory=lambda: int(_number(("RATE_LIMIT_PER_MINUTE",), 30, int, 0, 10_000))
     )
-    # Job queue. A claim (lease) must outlive the slowest analysis: LLM timeout x retries x attempts.
+    # Job queue. Workers renew their claim every lease/3, so the lease only bounds crash-recovery time.
     embedded_worker: bool = field(default_factory=lambda: _bool("EMBEDDED_WORKER", True))
     worker_poll_seconds: float = field(default_factory=lambda: _number(("WORKER_POLL_SECONDS",), 1.0, float, 0.1, 60))
-    job_lease_seconds: int = field(default_factory=lambda: int(_number(("JOB_LEASE_SECONDS",), 1800, int, 60, 86_400)))
+    job_lease_seconds: int = field(default_factory=lambda: int(_number(("JOB_LEASE_SECONDS",), 300, int, 30, 86_400)))
     max_job_attempts: int = field(default_factory=lambda: int(_number(("MAX_JOB_ATTEMPTS",), 2, int, 1, 10)))
     allowed_repositories: frozenset[str] = field(default_factory=lambda: _repo_list("ALLOWED_REPOSITORIES"))
 

@@ -256,6 +256,18 @@ def claim_incident(incident_id: uuid.UUID, lease: timedelta) -> bool:
         return result.rowcount == 1
 
 
+def renew_lease(incident_id: uuid.UUID, lease: timedelta) -> bool:
+    """Extend this worker's claim. False if the incident is no longer `processing` (finished or reclaimed)."""
+    now = datetime.now(UTC)
+    with session_scope() as session:
+        result: CursorResult[Any] = session.execute(  # type: ignore[assignment]
+            update(Incident)
+            .where(Incident.id == incident_id, Incident.status == "processing")
+            .values(lease_expires_at=now + lease)
+        )
+        return result.rowcount == 1
+
+
 def claim_next(lease: timedelta, scan: int = 10) -> dict[str, Any] | None:
     """Claim the oldest queued incident. Returns the job (id, repo, error, trace, attempts) or None if empty."""
     stmt = select(Incident.id).where(Incident.status == "queued").order_by(Incident.created_at).limit(scan)

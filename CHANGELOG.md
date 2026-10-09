@@ -6,6 +6,8 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Added
+- Lease heartbeat: workers renew their claim while analysing; default lease 5 min (crash recovery in
+  minutes instead of half an hour).
 - Operations runbook (`docs/RUNBOOK.md`) and example Prometheus alert rules, checked with `promtool` in CI.
 - Sentry webhook adapter (`POST /integrations/sentry`): HMAC signature verification, project-to-repository
   mapping, idempotent per Sentry event, size and rate limits.

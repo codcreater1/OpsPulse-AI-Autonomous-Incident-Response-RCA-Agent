@@ -114,3 +114,27 @@ def test_wait_mode_does_not_run_an_incident_a_worker_already_claimed(client, mon
     monkeypatch.setattr(incident_service, "claim_for_inline_run", lambda incident_id: False)
     resp = client.post("/webhook/incident?wait=true", json=incident_payload(), headers=API_HEADERS)
     assert resp.status_code == 202 and resp.json()["status"] == "processing" and llm.calls == 0
+
+
+def test_heartbeat_renews_the_lease_while_work_runs_and_stops_after():
+    import time
+
+    from src.worker import LeaseHeartbeat
+
+    incident_id = _queued()
+    repositories.claim_incident(incident_id, timedelta(seconds=1))
+    with LeaseHeartbeat(incident_id, timedelta(minutes=5), interval=0.05) as heartbeat:
+        time.sleep(0.3)
+    assert heartbeat.renewals >= 2
+    with session_scope() as session:
+        lease = session.get(Incident, incident_id).lease_expires_at
+    lease = lease if lease.tzinfo else lease.replace(tzinfo=UTC)
+    assert lease > datetime.now(UTC) + timedelta(minutes=4)  # extended far beyond the original 1 second
+    assert Worker().recover_expired() == (0, 0)
+
+
+def test_heartbeat_stops_renewing_once_the_incident_is_finished():
+    incident_id = _queued()
+    repositories.claim_incident(incident_id, LEASE)
+    repositories.update_incident(incident_id, status="analysis_ready")
+    assert repositories.renew_lease(incident_id, LEASE) is False

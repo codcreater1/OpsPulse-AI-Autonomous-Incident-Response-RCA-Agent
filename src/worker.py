@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import signal
 import threading
+import uuid
 from datetime import timedelta
 from types import FrameType
 
@@ -27,6 +28,36 @@ from src.services.incident_service import DatabaseUnavailableError
 logger = logging.getLogger(__name__)
 
 MAX_BACKOFF_SECONDS = 30.0
+
+
+class LeaseHeartbeat:
+    """Renews a claim every lease/3 while the analysis runs, so the lease can be short (fast crash recovery)
+    without a slow analysis being reclaimed by another worker. Renewal failures are logged, never raised."""
+
+    def __init__(self, incident_id: uuid.UUID, lease: timedelta, interval: float | None = None) -> None:
+        self.incident_id = incident_id
+        self.lease = lease
+        self.interval = interval if interval is not None else max(lease.total_seconds() / 3, 1.0)
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="opspulse-lease", daemon=True)
+        self.renewals = 0
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval):
+            try:
+                if not repositories.renew_lease(self.incident_id, self.lease):
+                    return  # finished or no longer ours
+                self.renewals += 1
+            except SQLAlchemyError as exc:
+                logger.warning("lease renewal failed: %s", type(exc).__name__)
+
+    def __enter__(self) -> LeaseHeartbeat:
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self._stop.set()
+        self._thread.join(timeout=5)
 
 
 class Worker:
@@ -59,9 +90,10 @@ class Worker:
         if job is None:
             return False
         logger.info("claimed incident %s (claim %d)", job["incident_id"], job["job_attempts"])
-        incident_service.run_incident_pipeline(
-            job["incident_id"], job["repo_name"], job["error_message"], job["stack_trace"]
-        )
+        with LeaseHeartbeat(job["incident_id"], self.lease):
+            incident_service.run_incident_pipeline(
+                job["incident_id"], job["repo_name"], job["error_message"], job["stack_trace"]
+            )
         return True
 
     def run_forever(self) -> None:

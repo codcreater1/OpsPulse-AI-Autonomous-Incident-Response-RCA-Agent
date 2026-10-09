@@ -43,7 +43,7 @@ which waits for an **explicit human approval** and is never merged automatically
 | Persistence | PostgreSQL/Neon via SQLAlchemy 2, Alembic migrations, failure taxonomy (`error_category`) |
 | Observability | Structured JSON logs with incident correlation and secret redaction; Langfuse v4 traces with content masking by default; Prometheus `/metrics` (content-free labels) |
 | Evaluation | 26-case synthetic RCA dataset, deterministic metrics, mock and live modes; labelled retrieval dataset comparing two ranking strategies |
-| Delivery | 185 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
+| Delivery | 187 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
 
 ## Architecture
 
@@ -102,8 +102,8 @@ Keeping DB writes and GitHub calls in the service layer, after the graph finishe
 retry to open a second PR.
 
 **Durable queue.** Submitted incidents are `queued` rows. Workers claim one with a compare-and-set update
-(`queued -> processing`) that also sets a lease (`JOB_LEASE_SECONDS`, default 30 min, longer than the slowest
-possible analysis). If a worker dies, its lease expires and the incident is queued again; after
+(`queued -> processing`) that also sets a lease (`JOB_LEASE_SECONDS`, default 5 min) which the worker renews every
+lease/3 while it analyses. If a worker dies, the lease expires and the incident is queued again; after
 `MAX_JOB_ATTEMPTS` claims it fails as `interrupted`. The same mechanism works on PostgreSQL and SQLite, and any
 number of workers can run.
 
@@ -445,7 +445,7 @@ stack traces or connection strings. Re-sending a request with the same `incident
 ## Testing and CI
 
 ```bash
-pytest                               # 185 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
+pytest                               # 187 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
 pytest --cov=src --cov=evals         # coverage (87% total at time of writing)
 ruff check src tests evals scripts migrations && ruff format --check src tests evals scripts migrations
 mypy                                 # src/
@@ -526,7 +526,6 @@ pipeline, gate and sandboxed verification - **not** the model's ability. PR crea
 ## Roadmap
 
 - Run the live evaluation and publish its report next to the mock baseline; add more real-world-shaped cases.
-- Renew worker leases during long analyses (today the lease is a fixed upper bound).
 - More inbound adapters (Alertmanager, Datadog) and per-tenant allow-lists.
 - PostgreSQL full-text search for candidate selection when histories outgrow the 200-row window; evaluate
   embeddings only if lexical recall proves insufficient on real data.
