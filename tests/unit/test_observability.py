@@ -5,8 +5,11 @@ from typing import ClassVar
 import pytest
 from langchain_core.callbacks import BaseCallbackHandler
 
+from src.integrations import observability as observability_module
 from src.integrations.observability import build_run_config, mask_trace_data
 from src.logging_config import JsonFormatter, incident_id_var, redact
+
+_UNCACHED_HANDLER_LOOKUP = observability_module._callback_handler_class.__wrapped__
 
 GH = "ghp_" + "A" * 36
 GROQ = "gsk_" + "b" * 40
@@ -87,7 +90,7 @@ def langfuse_enabled(monkeypatch, set_settings):
     set_settings(langfuse_public_key="pk-test", langfuse_secret_key="sk-test")
     _FakeLangfuse.log = []
     monkeypatch.setattr(observability, "Langfuse", _FakeLangfuse)
-    monkeypatch.setattr(observability, "CallbackHandler", _RecordingHandler)
+    monkeypatch.setattr(observability, "_callback_handler_class", lambda: _RecordingHandler)
     monkeypatch.setattr(observability, "propagate_attributes", lambda **kw: nullcontext())
     observability._client.cache_clear()
     yield _FakeLangfuse.log
@@ -134,3 +137,21 @@ def test_pipeline_runs_with_tracing_enabled(langfuse_enabled, client, fake_llm, 
     assert body["status"] == "analysis_ready"
     names = [entry[1] for entry in langfuse_enabled if entry[0] == "start"]
     assert {"incident.process", "retrieval.source_context", "evaluation.quality_gate"} <= set(names)
+
+
+def test_missing_langchain_integration_disables_llm_tracing_but_not_the_app(langfuse_enabled, monkeypatch):
+    import builtins
+
+    from src.integrations import observability
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "langfuse.langchain":
+            raise ModuleNotFoundError("Please install langchain to use the Langfuse langchain integration")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    monkeypatch.setattr(observability, "_callback_handler_class", _UNCACHED_HANDLER_LOOKUP)
+    config = observability.build_run_config("inc-1", "o/r", "f" * 64)
+    assert "callbacks" not in config and config["metadata"]["incident_id"] == "inc-1"

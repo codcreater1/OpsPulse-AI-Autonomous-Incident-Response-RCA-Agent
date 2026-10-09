@@ -15,7 +15,6 @@ from typing import Any, Literal
 
 from langchain_core.runnables import RunnableConfig
 from langfuse import Langfuse, propagate_attributes
-from langfuse.langchain import CallbackHandler
 
 from src.config import settings
 from src.logging_config import redact
@@ -132,11 +131,24 @@ def build_run_config(incident_id: str, repo_name: str, fingerprint: str) -> Runn
         # Backstop only: the router already bounds the loop (see src/agent/graph.py).
         "recursion_limit": 6 + 2 * settings.max_analysis_iterations,
     }
-    if _client() is not None:
+    handler_class = _callback_handler_class() if _client() is not None else None
+    if handler_class is not None:
         # The handler attaches LangGraph node spans and the LLM generation (model, latency, token usage)
         # to the current trace.
-        config["callbacks"] = [CallbackHandler(public_key=settings.langfuse_public_key)]
+        config["callbacks"] = [handler_class(public_key=settings.langfuse_public_key)]
     return config
+
+
+@lru_cache(maxsize=1)
+def _callback_handler_class() -> type | None:
+    """Langfuse's LangChain handler, imported lazily: a missing optional integration disables LLM-level
+    tracing instead of preventing the application from starting."""
+    try:
+        from langfuse.langchain import CallbackHandler
+    except ImportError as exc:
+        logger.warning("Langfuse LangChain integration unavailable (%s) - LLM generations not traced", exc)
+        return None
+    return CallbackHandler
 
 
 def flush_traces() -> None:
