@@ -407,6 +407,23 @@ right while every proposed diff failed `diff_applies`, i.e. the agent did not pr
 real lines of the file with their line numbers and indentation (matching itself stays strict). It is unit-tested but
 **not yet measured live**.
 
+**Third live session** (`prompt v5` + `quality-gate-v7`, `gpt-oss-120b`; the daily token quota ended the run again, so
+this is two data points, not an evaluation - reports
+[callers](evals/results/rca-callers-live-2026-10-10-prompt-v5-gate-v7-partial.md),
+[pool-timeout](evals/results/rca-holdout-live-2026-10-10-prompt-v5-gate-v7-pool-timeout.md)):
+
+- **`fix_location` fired live for the first time.** On `caller-passes-none` the model's first attempt cited the
+  caller's code but patched the callee; the gate scored 0.935 and rejected it on `fix_location` alone, with every
+  other check passing - exactly the case the check was written for. The following attempts did not recover (schema
+  and grounding failures, then the quota), so the case ended unaccepted with category `missing_key` instead of the
+  labelled `null_reference`.
+- **A held-out false acceptance.** `ho-pool-timeout` (labelled `dependency_unavailable`) was **accepted** with
+  `configuration_error`, gate score 0.98: the evidence was grounded and the patch applied, but the category is
+  arguably wrong for a pool-exhaustion timeout. This is the documented blind spot again (grounding is not
+  correctness); the label itself is debatable, so it counts as a miss against the labels.
+- Not run: the other four caller cases, `ho-off-by-one` and `ho-drift-attribute` (quota). `quality-gate-v7`'s
+  closest-lines feedback is therefore still **not measured live**.
+
 What the first live run showed, and what changed:
 
 - **The model did not fabricate evidence**: every "observed" quote was verbatim in the retrieved data (50/50).
@@ -430,6 +447,31 @@ Groq's free tier. Use `--sleep` to stay under the per-minute limit and `--case` 
 missing env var) where a correct, grounded analysis without a patch burned all 3 attempts. `quality-gate-v3`
 stops such analyses with `error_category=no_code_fix`: LLM calls on the dataset fell from 40 to 32 (average
 attempts 1.538 -> 1.231) with every quality metric unchanged.
+
+### Incident assistant evaluation
+
+```bash
+python -m evals.ask_eval --mode mock --min rules_intent_accuracy=1.0   # offline, in CI
+python -m evals.ask_eval --mode live --sleep 5                         # real model, needs GROQ_API_KEY
+```
+
+The asked-about records come from evaluation cases run through the real graph (scripted RCA replies), so they are the
+same in both modes. 11 routing questions (English and Turkish) x 5 records, and 9 model questions of five kinds:
+grounded, uncited, fabricated quote, unanswerable, approval advice / injection. Every metric is a deterministic ratio:
+
+| Metric | Mock (validation around a scripted model) |
+|---|---|
+| rules_intent_accuracy / rules_content_correctness | 55/55 / 55/55 |
+| grounded_answers_pass | 10/10 (a grounded answer is never flagged) |
+| fabricated_quotes_flagged / uncited_answers_flagged | 5/5 / 5/5 |
+| unanswerable_abstained | 15/15 ("not in the record" is accepted, not penalised) |
+| approval_advice_blocked | 10/10 (the answer is replaced, not just flagged) |
+
+Mock mode measures the **validation and routing**, not a model. In `--mode live` the same checks are applied to the
+real model's answers (the five live-tagged question kinds, 2 records) - **that run has not been made yet**: the free
+tier's daily quota was exhausted. The harness found two defects while it was being written, both fixed: quote
+verification compared against the prompt's JSON-escaped rendering (so correct quotes containing `"` were flagged),
+and a Turkish phrasing of the patch question was not routed.
 
 ## Retrieval
 
@@ -732,8 +774,9 @@ stack traces or connection strings. Re-sending a request with the same `incident
 ## Testing and CI
 
 ```bash
-pytest                               # 216 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
-pytest --cov=src --cov=evals         # coverage (87% total at time of writing)
+pytest                               # 320 offline tests (SQLite, fakes for Groq/GitHub/Langfuse; includes property-based tests)
+pytest --cov=src --cov=evals         # coverage (86% total at time of writing; CI enforces a floor of 84%)
+python -m evals.ask_eval --mode mock # incident-assistant evaluation (offline)
 ruff check src tests evals scripts migrations && ruff format --check src tests evals scripts migrations
 mypy                                 # src/
 RUN_LIVE_TESTS=1 pytest tests/integration -v   # opt-in, uses your real .env

@@ -1,0 +1,43 @@
+name: Security
+
+# Dependency vulnerabilities and static analysis. Kept out of the main CI so that a newly published advisory
+# cannot turn an unrelated pull request red; it runs on pushes to main, weekly, and on demand.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    name: Dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - run: pip install "pip-audit>=2.7,<3"
+      - name: Audit pinned runtime requirements
+        run: pip-audit -r requirements.txt --progress-spinner off
+
+  codeql:
+    name: CodeQL (Python and JavaScript)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python, javascript-typescript
+          build-mode: none
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python-and-js"

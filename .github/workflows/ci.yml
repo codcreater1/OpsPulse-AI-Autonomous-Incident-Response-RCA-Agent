@@ -45,7 +45,8 @@ jobs:
         run: python -c "import src.main; from src.services.incident_service import get_graph; get_graph()"
 
       - name: Unit tests with coverage
-        run: pytest --cov=src --cov=evals --cov-report=term-missing:skip-covered --cov-report=xml
+        # The floor sits just under the measured coverage (86%); it exists to catch an untested feature, not to chase a number.
+        run: pytest --cov=src --cov=evals --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=84
 
       - name: Offline evaluation, regression gate against committed baselines
         # Scripted replies are deterministic, so any drop in a quality metric is a real behaviour change.
@@ -54,6 +55,13 @@ jobs:
             python -m evals.run_rca --mode mock --dataset "$dataset" --out /tmp/eval
             python -m evals.compare_reports "evals/baselines/rca-$dataset-mock.json" /tmp/eval/rca-$dataset-mock-*.json               --fail-on-regression
           done
+
+      - name: Incident assistant evaluation (offline - routing, answer content, quote and approval-advice checks)
+        run: |
+          python -m evals.ask_eval --mode mock --out /tmp/ask-eval \
+            --min rules_intent_accuracy=1 --min rules_content_correctness=1 --min grounded_answers_pass=1 \
+            --min fabricated_quotes_flagged=1 --min uncited_answers_flagged=1 --min unanswerable_abstained=1 \
+            --min approval_advice_blocked=1
 
       - name: Retrieval evaluation (fails on any cross-repository leak)
         run: python -m evals.run_retrieval

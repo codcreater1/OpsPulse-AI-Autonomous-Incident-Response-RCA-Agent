@@ -51,6 +51,11 @@ class AskResponse(BaseModel):
     )
     cited_sections: list[str] = Field(description="Sections of the record the answer is based on")
     unverified_quotes: list[str] = Field(description="Quoted spans of the answer not found verbatim in the record")
+    flags: list[str] = Field(
+        default_factory=list,
+        description="Validation flags: `approval_advice` (answer replaced: the assistant never recommends the "
+        "decision), `unusable` (no usable model output)",
+    )
     follow_ups: list[str] = Field(description="Suggested next questions")
     model: str
     disclaimer: str

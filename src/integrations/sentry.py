@@ -96,7 +96,9 @@ def to_incident(payload: dict[str, Any]) -> SentryIncident:
     if not message.strip():
         raise SentryPayloadError("event has neither an exception nor a title")
 
-    frames = [f for f in ((last.get("stacktrace") or {}).get("frames") or []) if isinstance(f, dict)]
+    stacktrace = last.get("stacktrace")
+    raw_frames = stacktrace.get("frames") if isinstance(stacktrace, dict) else None
+    frames = [f for f in raw_frames if isinstance(f, dict)] if isinstance(raw_frames, list) else []
     if any(f.get("in_app") is True for f in frames):
         frames = [f for f in frames if f.get("in_app") is not False]  # keep application frames
     lines = ["Traceback (most recent call last):"] if frames else []

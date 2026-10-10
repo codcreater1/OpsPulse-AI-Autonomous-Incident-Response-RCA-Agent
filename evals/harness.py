@@ -181,8 +181,8 @@ class ScriptedModel:
 # ------------------------------------------------------------------ run one case
 
 
-def run_case(case: EvalCase, model_factory: ModelFactory | None) -> dict[str, Any]:
-    """Execute the workflow and return the raw facts the metrics are computed from."""
+def run_final(case: EvalCase, model_factory: ModelFactory | None) -> tuple[IncidentState, int]:
+    """Run the graph for one case; returns (final state, wall milliseconds)."""
     graph = build_graph(local_source_fetcher(case), local_history(case), model_factory)
     incident_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"opspulse-eval/{case.id}"))
     started = time.perf_counter()
@@ -190,7 +190,34 @@ def run_case(case: EvalCase, model_factory: ModelFactory | None) -> dict[str, An
         initial_state(incident_id, case.error_message, case.stack_trace, case.repo_name),
         config=build_run_config(incident_id, case.repo_name, "eval"),
     )
-    wall_ms = int((time.perf_counter() - started) * 1000)
+    return final, int((time.perf_counter() - started) * 1000)
+
+
+_STATUS_FOR = {"accepted": "analysis_ready", "needs_review": "needs_review", "failed": "failed"}
+
+
+def incident_record(case: EvalCase, final: IncidentState) -> dict[str, Any]:
+    """The incident record shape the API serves, built from a final graph state (no database, no remediation)."""
+    analysis = dict(final["root_cause_analysis"] or {})
+    analysis["attempts"] = final["attempts"]
+    return {
+        "incident_id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"opspulse-eval/{case.id}")),
+        "repo_name": case.repo_name,
+        "status": _STATUS_FOR.get(final["workflow_status"], final["workflow_status"]),
+        "status_reason": None,
+        "error_category": final["error_category"],
+        "error_message": case.error_message,
+        "affected_file": final["affected_file"],
+        "quality_score": final["quality_score"],
+        "iterations": final["iterations"],
+        "analysis": analysis,
+        "suggested_patch": final["suggested_patch"],
+    }
+
+
+def run_case(case: EvalCase, model_factory: ModelFactory | None) -> dict[str, Any]:
+    """Execute the workflow and return the raw facts the metrics are computed from."""
+    final, wall_ms = run_final(case, model_factory)
     analysis = {
         k: v for k, v in (final["root_cause_analysis"] or {}).items() if k not in ("execution_metadata", "evaluation")
     }

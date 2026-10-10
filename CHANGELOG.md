@@ -6,11 +6,31 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Changed
+- Review console redesign: deep links and back/forward navigation, search, auto-refresh, keyboard shortcuts,
+  gate-check meters (failures first), attempt timeline, patch view with line numbers, copy/download, confirmation
+  dialog with the approval-bound SHA-256, theme switch, mobile layout, toasts, empty and loading states. Same CSP
+  (no inline script or style, `textContent` only).
 - `quality-gate-v7`: when a diff does not apply, the retry feedback quotes the closest real source lines with their
   line numbers and indentation. Matching is unchanged (still strict); only the explanation is more precise.
   Motivated by `ho-off-by-one` (right diagnosis, three diffs that never applied). Not yet measured live.
 
+### Fixed
+- Sentry webhook: a correctly signed payload whose `stacktrace` was a list raised `AttributeError` (HTTP 500);
+  found by a property-based test. Wrongly typed fields at any known position are now a payload problem or ignored.
+- Assistant: quoted text was verified against the prompt's JSON-escaped rendering, so correct quotes containing
+  `"` were flagged as not in the record; verification now uses the record's decoded strings.
+
 ### Added
+- Incident assistant evaluation (`python -m evals.ask_eval`, dataset `ask-questions-v1`): routing, answer content,
+  quote verification, uncited answers, abstention and approval-advice checks; offline thresholds in CI. Live run
+  pending quota.
+- Assistant guard: an answer that recommends approving or merging is replaced and flagged (`flags:
+  approval_advice`) - a checked property instead of a prompt instruction.
+- Property-based tests (hypothesis): diff round-trip, parsers never raise unexpected errors, prompt tags cannot
+  survive neutralisation, answers stay bounded, guidance is total.
+- `Security` workflow (pip-audit, CodeQL for Python and JavaScript); CI coverage floor (84%).
+- Third live session notes: `fix_location` fired live for the first time; a held-out false acceptance
+  (`ho-pool-timeout`) recorded.
 - `GET /incidents/{id}/guidance` and a "What to do now" card: deterministic state, reason, next steps and
   per-check advice from the stored record and the runbook (no LLM; complete for every gate check and error category,
   enforced by a test).
@@ -23,12 +43,6 @@ All notable changes are listed here. Versions of behaviour-critical components a
   with a correct diagnosis but a patch that never applied. Reports in `evals/results/`.
 - `docs/API.md`: API reference generated from the OpenAPI schema (`python -m scripts.export_api_docs`);
   a unit test fails when it is out of date; included in the documentation site.
-
-### Changed
-- Review console redesign: deep links and back/forward navigation, search, auto-refresh, keyboard shortcuts,
-  gate-check meters (failures first), attempt timeline, patch view with line numbers, copy/download, confirmation
-  dialog with the approval-bound SHA-256, theme switch, mobile layout, toasts, empty and loading states. Same CSP
-  (no inline script or style, `textContent` only).
 
 ## [1.2.0] - 2026-10-10
 

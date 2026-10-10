@@ -170,14 +170,45 @@ def _squash(text: str) -> str:
 _QUOTED = re.compile(r"`([^`\n]{6,200})`")
 
 
-def unverified_quotes(answer: str, sections: dict[str, str]) -> list[str]:
+def record_text(value: Any, limit: int = 400_000) -> str:
+    """Every string stored in the record (decoded, not JSON-escaped), for verifying quotes."""
+    parts: list[str] = []
+    stack = [value]
+    size = 0
+    while stack and size < limit:
+        item = stack.pop()
+        if isinstance(item, str):
+            parts.append(item)
+            size += len(item)
+        elif isinstance(item, dict):
+            stack.extend(item.values())
+        elif isinstance(item, list):
+            stack.extend(item)
+    return "\n".join(parts)
+
+
+def unverified_quotes(answer: str, sections: dict[str, str], extra_text: str = "") -> list[str]:
     """Backtick-quoted spans of the answer that do not occur verbatim in the record."""
-    haystack = _squash("\n".join(sections.values()))
+    haystack = _squash("\n".join([*sections.values(), extra_text]))
     missing = []
     for span in _QUOTED.findall(answer):
         if _squash(span) not in haystack:
             missing.append(span[:80])
     return list(dict.fromkeys(missing))[:3]
+
+
+# The assistant never recommends the decision. The prompt says so; this makes it a checked property rather than a
+# hope: an answer that tells the reviewer to approve or merge is replaced.
+_APPROVAL_ADVICE = re.compile(
+    r"\b(you (should|can|may|must|need to)|please|go ahead and|just|simply|safe to|ok(ay)? to|recommend(ed)? to|"
+    r"i (recommend|suggest|advise)|let'?s)\b[^.\n]{0,40}\b(approve|merge|ship|deploy)\b|"
+    r"\b(approve|merge)\b[^.\n]{0,20}\b(now|immediately|this|it)\b",
+    re.IGNORECASE,
+)
+APPROVAL_NOTICE = (
+    "The model's answer contained a recommendation to approve or merge. This assistant never gives that "
+    "recommendation: the decision is yours. Use the evidence, the gate checks and the uncertainties on this page."
+)
 
 
 def _follow_ups(raw: Any) -> list[str]:
@@ -187,7 +218,7 @@ def _follow_ups(raw: Any) -> list[str]:
     return list(dict.fromkeys(cleaned))[:MAX_FOLLOW_UPS]
 
 
-def parse_answer(text: str, sections: dict[str, str]) -> dict[str, Any]:
+def parse_answer(text: str, sections: dict[str, str], extra_text: str = "") -> dict[str, Any]:
     """Validate the model's JSON; never trust it to be well-formed, grounded or honest about quotes."""
     obj = extract_json_object(text) or {}
     answer = obj.get("answer")
@@ -200,13 +231,19 @@ def parse_answer(text: str, sections: dict[str, str]) -> dict[str, Any]:
             "cited_sections": [],
             "follow_ups": [],
             "unverified_quotes": [],
+            "flags": ["unusable"],
         }
+    flags: list[str] = []
+    if _APPROVAL_ADVICE.search(answer):
+        flags.append("approval_advice")
+        answer = APPROVAL_NOTICE
     answerable = obj.get("answerable") is not False
     cited = [s for s in obj.get("cited_sections", []) if isinstance(s, str) and s in sections]
     cited = list(dict.fromkeys(cited))
-    bad_quotes = unverified_quotes(answer, sections)
-    grounded = ((not answerable) or bool(cited)) and not bad_quotes
+    bad_quotes = unverified_quotes(answer, sections, extra_text)
+    grounded = ((not answerable) or bool(cited)) and not bad_quotes and not flags
     return {
+        "flags": flags,
         "answer": answer,
         "answerable": answerable,
         "grounded": grounded,
@@ -238,7 +275,7 @@ _INTENTS: list[tuple[str, re.Pattern[str]]] = [
     (
         "patch_summary",
         re.compile(
-            r"\b(patch|diff|yama)\b.*(chang|explain|summar|what|ne |acikla|açıkla|prove)|"
+            r"\b(patch|diff|yama)\b.*(chang|explain|summar|what|ne |neyi|nedir|degis|değiş|acikla|açıkla|prove)|"
             r"(chang|explain|summar|what|acikla|açıkla).*\b(patch|diff|yama)\b",
             re.I,
         ),
@@ -320,6 +357,17 @@ def ask(incident_id: uuid.UUID, question: str, history: list[dict[str, str]] | N
     incident = incident_service.get_incident_with_approval(incident_id)
     if incident is None:
         raise IncidentNotFoundError(str(incident_id))
+    return answer_record(incident, question, history)
+
+
+def answer_record(
+    incident: dict[str, Any],
+    question: str,
+    history: list[dict[str, str]] | None = None,
+    model_factory: Any = None,
+) -> dict[str, Any]:
+    """Answer about an incident record (the dict the API returns). Used by `ask` and by the evaluation harness."""
+    incident_id = incident.get("incident_id")
     guide = guidance_module.build_guidance(incident)
     question = question.strip()
     history = history or []
@@ -339,7 +387,7 @@ def ask(incident_id: uuid.UUID, question: str, history: list[dict[str, str]] | N
 
     sections = build_sections(incident, guide)
     try:
-        reply = invoke_json_model(build_messages(question, sections, history), 0.0, None)
+        reply = invoke_json_model(build_messages(question, sections, history), 0.0, None, model_factory)
     except LLMError as exc:
         # Degrade instead of failing: the reviewer still gets the deterministic guidance.
         fallback = rules_answer("next_steps", guide, incident)
@@ -351,7 +399,7 @@ def ask(incident_id: uuid.UUID, question: str, history: list[dict[str, str]] | N
         logger.info("ask incident=%s degraded reason=%s", incident_id, exc.category)
         return {**fallback, "source": "rules", "degraded": True, "model": "rules", "disclaimer": DISCLAIMER}
 
-    result = parse_answer(reply.text, sections)
+    result = parse_answer(reply.text, sections, record_text(incident))
     outcome = (
         "grounded"
         if result["grounded"] and result["answerable"]
