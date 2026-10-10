@@ -211,6 +211,7 @@ paraphrases code instead of quoting it; the feedback loop usually fixes that, at
 ```bash
 python -m evals.run_rca --mode mock     # deterministic, offline, used in CI
 python -m evals.run_rca --mode live --sleep 20   # real model; needs GROQ_API_KEY (~100-125k tokens per run)
+python -m evals.run_rca --mode live --case ho-off-by-one --repeat 5   # run-to-run variation of one case
 python -m evals.run_rca --rescore evals/results/<report>.json   # recompute metrics, no model calls
 python -m evals.run_retrieval
 ```
@@ -262,6 +263,15 @@ no LLM-as-judge is used):
 These numbers say the gate rejected every fabricated quote, injection-compliant answer and inapplicable patch
 in the scripted set and accepted no inconclusive case. They say **nothing about how good the LLM is** - see the
 live results below.
+
+### Run-to-run variation
+
+A live run of a stochastic model is **one sample**. `ho-off-by-one` shows it: in the held-out sessions its diffs
+never applied (3 failed attempts under `quality-gate-v6`, 2 failed attempts under v7), and in a later run of the same
+code it was accepted on the first attempt with the correct one-line patch. `--repeat N` runs every case N times and
+reports, per case, how many runs were accepted and had the labelled category, and the share of cases whose outcome
+never changed (`metrics.consistency`). Until the live numbers in this README carry repeats, read single-run
+differences between versions (for example "v7 did not fix `ho-off-by-one`") as **anecdotes, not effects**.
 
 ### Regression gate, adversarial set and calibration
 
@@ -807,6 +817,15 @@ workflow has run green on GitHub since. Contributor workflow: [CONTRIBUTING.md](
 [SECURITY.md](SECURITY.md).
 
 ## Demo
+
+**The console in one command** (no Docker, PostgreSQL or API keys; a throwaway SQLite database, ten scripted cases):
+
+```bash
+python -m scripts.demo_console          # then open http://127.0.0.1:8000/console , API key: demo-key
+```
+
+The LLM is switched off in this mode, so the *What to do now* card and the rule-based answers work, and model
+questions degrade to the deterministic guidance.
 
 ![Terminal recording of the demo (scripted mock model)](docs/images/demo.svg)
 

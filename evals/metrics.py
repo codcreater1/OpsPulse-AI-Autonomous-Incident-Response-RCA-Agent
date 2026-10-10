@@ -75,6 +75,40 @@ def _percentile(values: list[int], q: float) -> int | None:
     return ordered[min(len(ordered) - 1, math.ceil(q * len(ordered)) - 1)]
 
 
+def consistency(results: list[Result]) -> dict[str, Any] | None:
+    """Run-to-run variation, reported only when a case was run more than once (`--repeat`).
+
+    A single live run of a stochastic model is one sample: two sessions of the same case can end differently. This
+    makes that visible - per case, how many runs were accepted and how many had the labelled category - and counts
+    the cases whose outcome never changed.
+    """
+    by_case: dict[str, list[Result]] = {}
+    for r in results:
+        if "case_id" in r and not _provider_failed(r):
+            by_case.setdefault(r["case_id"], []).append(r)
+    repeated = {k: v for k, v in by_case.items() if len(v) > 1}
+    if not repeated:
+        return None
+    per_case = {}
+    stable = 0
+    for case_id, runs in repeated.items():
+        outcomes = {(r["workflow_status"], r["predicted_category"]) for r in runs}
+        stable += len(outcomes) == 1
+        per_case[case_id] = {
+            "runs": len(runs),
+            "accepted": sum(bool(r["gate_passed"]) for r in runs),
+            "correct_category": sum(_correct(r) for r in runs),
+            "distinct_outcomes": len(outcomes),
+        }
+    return {
+        "cases_repeated": len(repeated),
+        "stable_outcome_rate": _ratio(
+            stable, len(repeated), "repeated cases whose outcome never changed / repeated cases"
+        ),
+        "per_case": per_case,
+    }
+
+
 def compute_metrics(
     results: list[Result], cost_in_per_mtok: float = 0.0, cost_out_per_mtok: float = 0.0
 ) -> dict[str, Any]:
@@ -190,4 +224,5 @@ def compute_metrics(
             "model_confidence": calibration(evaluated, "model_confidence"),
             "quality_score": calibration(evaluated, "quality_score"),
         },
+        "consistency": consistency(results),
     }

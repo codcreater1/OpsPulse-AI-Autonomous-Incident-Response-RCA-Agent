@@ -70,6 +70,22 @@ def _summary(report: dict[str, Any]) -> str:
             f"| {r['case_id']} | {expected} | {r['predicted_category']} | {'pass' if r['gate_passed'] else 'fail'} | "
             f"{r['workflow_status']} | {len(r['attempts'])} | {r['grounded_quotes']}/{r['observed_quotes']} |"
         )
+    consistency = m.get("consistency")
+    if consistency:
+        stable = consistency["stable_outcome_rate"]
+        lines += [
+            "",
+            f"### Run-to-run consistency ({consistency['cases_repeated']} repeated case(s); stable outcome "
+            f"{stable['numerator']}/{stable['denominator']})",
+            "",
+            "| Case | Runs | Accepted | Correct category | Distinct outcomes |",
+            "|---|---|---|---|---|",
+        ]
+        for case_id, row in consistency["per_case"].items():
+            lines.append(
+                f"| {case_id} | {row['runs']} | {row['accepted']} | {row['correct_category']} | "
+                f"{row['distinct_outcomes']} |"
+            )
     return "\n".join(lines) + "\n"
 
 
@@ -79,6 +95,7 @@ def run(
     out_dir: pathlib.Path = REPORTS,
     sleep_seconds: float = 1.0,
     dataset_name: str = "tuning",
+    repeat: int = 1,
 ) -> dict[str, Any]:
     if mode == "live" and not settings.groq_api_key:
         raise SystemExit("live mode needs GROQ_API_KEY")
@@ -87,13 +104,14 @@ def run(
     started = datetime.now(UTC)
     results = []
     for case in cases:
-        factory = None
-        if mode == "mock":
-            model = ScriptedModel(case)
-            factory = lambda temperature, model=model: model  # noqa: E731
-        results.append(run_case(case, factory))
-        if mode == "live":
-            time.sleep(sleep_seconds)  # stay inside provider rate limits (tokens per minute)
+        for index in range(max(repeat, 1)):
+            factory = None
+            if mode == "mock":
+                model = ScriptedModel(case)
+                factory = lambda temperature, model=model: model  # noqa: E731
+            results.append({**run_case(case, factory), "run": index + 1})
+            if mode == "live":
+                time.sleep(sleep_seconds)  # stay inside provider rate limits (tokens per minute)
     report = {
         "mode": mode,
         "started_at": started.isoformat(),
@@ -131,6 +149,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=pathlib.Path, default=REPORTS)
     parser.add_argument("--sleep", type=float, default=1.0, help="seconds between cases in live mode")
     parser.add_argument(
+        "--repeat", type=int, default=1, help="run every case N times and report run-to-run consistency"
+    )
+    parser.add_argument(
         "--min",
         action="append",
         default=[],
@@ -154,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
         args.rescore.with_suffix(".md").write_text(_summary(report), encoding="utf-8")
         print(_summary(report))
         return 0
-    report = run(args.mode, args.cases, args.out, args.sleep, args.dataset)
+    report = run(args.mode, args.cases, args.out, args.sleep, args.dataset, args.repeat)
     print(_summary(report))
     print("reports:", *report["paths"], sep="\n  ")
     failures = _check_minimums(report["metrics"], args.min)

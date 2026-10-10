@@ -94,3 +94,30 @@ def test_adversarial_bait_is_rejected_by_the_gate_in_mock_mode():
     # documented blind spot: grounded but wrong diagnosis is accepted
     blind = run("adv-misleading-history-blind-spot")
     assert blind["gate_passed"] and blind["predicted_category"] != blind["expected"]["root_cause_category"]
+
+
+def test_repeated_runs_report_run_to_run_consistency():
+    from evals.metrics import consistency
+
+    stable = [_result(), _result()]
+    flaky = [_result(), _result(cat_ok=False, gate=False)]
+    for r in stable:
+        r["case_id"] = "stable"
+    for r in flaky:
+        r["case_id"] = "flaky"
+    out = consistency(stable + flaky)
+    assert out and out["cases_repeated"] == 2
+    assert out["stable_outcome_rate"]["numerator"] == 1  # only "stable" never changed
+    assert out["per_case"]["flaky"] == {"runs": 2, "accepted": 1, "correct_category": 1, "distinct_outcomes": 2}
+    assert consistency([_result()]) is None  # nothing repeated, nothing reported
+
+
+def test_repeat_flag_runs_each_case_n_times_in_mock_mode(tmp_path):
+    from evals.run_rca import run
+
+    report = run("mock", ["adv-fabricated-line"], tmp_path, dataset_name="adversarial", repeat=3)
+    assert [r["run"] for r in report["results"]] == [1, 2, 3]
+    assert report["metrics"]["consistency"]["per_case"]["adv-fabricated-line"]["runs"] == 3
+    assert "Run-to-run consistency" in (tmp_path / report["paths"][1].split("\\")[-1].split("/")[-1]).read_text(
+        encoding="utf-8"
+    )

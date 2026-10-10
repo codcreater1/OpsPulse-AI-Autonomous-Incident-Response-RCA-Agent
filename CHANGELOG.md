@@ -22,6 +22,11 @@ All notable changes are listed here. Versions of behaviour-critical components a
   `"` were flagged as not in the record; verification now uses the record's decoded strings.
 
 ### Added
+- `python -m scripts.demo_console`: one command to open the console with a migrated, seeded throwaway database
+  (no Docker, no PostgreSQL, no API keys; LLM off).
+- `evals.run_rca --repeat N` and `metrics.consistency`: per-case accepted / correct counts over repeated runs and the
+  share of cases with a stable outcome; evaluation results now also store the final patch and the failed checks'
+  detail text for diagnosis.
 - Incident assistant evaluation (`python -m evals.ask_eval`, dataset `ask-questions-v1`): routing, answer content,
   quote verification, uncited answers, abstention and approval-advice checks; offline thresholds in CI. Live run
   pending quota.

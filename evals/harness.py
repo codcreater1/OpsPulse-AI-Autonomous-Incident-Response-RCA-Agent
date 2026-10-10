@@ -252,5 +252,14 @@ def run_case(case: EvalCase, model_factory: ModelFactory | None) -> dict[str, An
         "affected_files": sorted(files),
         "grounded_files": sum(files.values()),
         "attempts": final["attempts"],
+        # For diagnosis of failures (the cases are synthetic, so storing the patch and check texts is safe).
+        "patch": final["suggested_patch"],
+        "failed_check_details": {
+            name: str(check.get("detail"))[:600]
+            for name, check in (
+                ((final["root_cause_analysis"] or {}).get("evaluation") or {}).get("checks") or {}
+            ).items()
+            if isinstance(check, dict) and (check.get("score") or 0) < (check.get("max") or 0) - 1e-9
+        },
         "wall_ms": wall_ms,
     }
