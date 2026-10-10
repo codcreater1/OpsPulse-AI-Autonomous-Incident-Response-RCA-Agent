@@ -3,6 +3,8 @@
 # Without a Groq key the incident must travel api -> queue -> worker container and end as
 # failed/llm_not_configured, which proves migrations, the API, the queue and the separate worker all work.
 set -euo pipefail
+LOG="$(mktemp)"
+exec > >(tee "${LOG}") 2>&1
 
 KEY="ci-smoke-$(date +%s)"
 cat > .env <<EOF
@@ -15,7 +17,7 @@ cleanup() {
   code=$?
   if [ "${code}" -ne 0 ] && [ -n "${GITHUB_ACTIONS:-}" ]; then
     # Surface the cause as an annotation (readable without access to the raw job log).
-    report="$( { docker compose ps -a; docker compose logs --no-color --tail=40 worker; } 2>&1 | tail -c 6000 )"
+    report="$( { echo "--- script output"; tail -n 25 "${LOG}"; echo "--- containers"; docker compose ps -a; } 2>&1 | tail -c 6000 )"
     report="${report//'%'/'%25'}"; report="${report//$'\r'/}"; report="${report//$'\n'/'%0A'}"
     echo "::error title=compose smoke test failed::${report}"
   fi
