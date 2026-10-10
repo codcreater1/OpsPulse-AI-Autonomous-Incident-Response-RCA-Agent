@@ -137,4 +137,7 @@ def test_holdout_set_is_valid_and_disjoint_from_the_tuning_set():
     holdout = load_rca_dataset(DATASET_FILES["holdout"])
     assert len(holdout.cases) >= 10 and sum(c.expected.inconclusive for c in holdout.cases) >= 2
     assert not {c.id for c in tuning.cases} & {c.id for c in holdout.cases}
-    assert not {c.error_message for c in tuning.cases} & {c.error_message for c in holdout.cases}
+    # Standard messages (e.g. IndexError) may repeat; the same incident (message + trace) must not.
+    assert not {(c.error_message, c.stack_trace) for c in tuning.cases} & {
+        (c.error_message, c.stack_trace) for c in holdout.cases
+    }
