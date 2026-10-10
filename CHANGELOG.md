@@ -6,6 +6,12 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Added
+- `rca-prompt-v4`: explicit rules for non-empty `uncertainties` and valid evidence sources; schema normalises
+  unrecognised sources on unverified evidence. Live: schema validity 0.61 -> 0.91, attempts 1.50 -> 1.31.
+- Held-out evaluation set (`evals/datasets/rca_holdout.json`, 12 cases written before any model run on them);
+  `python -m evals.run_rca --dataset holdout`.
+- Claim tokens (migration 0005): only the current claim holder can renew a lease or write results; a worker that
+  lost its claim discards its result before remediation.
 - First live evaluations with `openai/gpt-oss-120b` (reports in `evals/results/`).
 - `quality-gate-v4`: blocking trace/code consistency check (catches deploy drift the first live run accepted).
 - `rca-prompt-v3`: root-cause category definitions (category accuracy 0.61 -> 0.83 on the same 22 cases;

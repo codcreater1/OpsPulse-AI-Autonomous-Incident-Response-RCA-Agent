@@ -83,6 +83,9 @@ historical_incidents and "quote" must be copied character-for-character from tha
 - If the data is insufficient to identify a root cause, set "evidence_sufficient" to false, explain what is \
 missing in "uncertainties", leave "unified_diff" empty and set "needs_human_review" to true.
 - "self_assessed_confidence" is your subjective estimate, not a probability. Be conservative.
+- "uncertainties" is NEVER empty: there is always something you could not verify (at minimum, that the proposed \
+fix has not been executed or tested).
+- "source" is exactly one of: stack_trace, code_context, historical_incidents, none.
 
 ## ROOT CAUSE CATEGORY
 "root_cause_category" is exactly one of: """

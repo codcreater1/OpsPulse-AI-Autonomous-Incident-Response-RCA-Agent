@@ -114,12 +114,18 @@ def create_incident(
         return current, False
 
 
-def update_incident(incident_id: uuid.UUID, **fields: Any) -> None:
-    """Update named columns of an existing incident (attribute names from `Incident`)."""
+def update_incident(incident_id: uuid.UUID, expected_claim_token: str | None = None, **fields: Any) -> None:
+    """Update named columns of an existing incident (attribute names from `Incident`).
+
+    With `expected_claim_token`, the write only happens while that claim still owns the `processing` incident;
+    otherwise ClaimLostError is raised and nothing is written.
+    """
     with session_scope() as session:
-        row = session.get(Incident, incident_id)
+        row = session.get(Incident, incident_id, with_for_update=expected_claim_token is not None)
         if row is None:
             raise LookupError(f"incident {incident_id} does not exist")
+        if expected_claim_token is not None and (row.status != "processing" or row.claim_token != expected_claim_token):
+            raise ClaimLostError(f"claim on incident {incident_id} was lost")
         for name, value in fields.items():
             if not hasattr(Incident, name):
                 raise AttributeError(f"unknown incident field {name!r}")
@@ -239,9 +245,14 @@ def find_similar_incidents(query: HistoryQuery, exclude_id: str | None = None, l
 # A claim is a lease; if the worker dies, the lease expires and the incident is queued again (bounded).
 
 
-def claim_incident(incident_id: uuid.UUID, lease: timedelta) -> bool:
-    """Atomically move one `queued` incident to `processing` for this worker. False if someone else won."""
+class ClaimLostError(RuntimeError):
+    """This worker's claim expired and another worker now owns the incident; its result must be discarded."""
+
+
+def claim_incident(incident_id: uuid.UUID, lease: timedelta) -> str | None:
+    """Atomically move one `queued` incident to `processing`. Returns this claim's token, or None if lost."""
     now = datetime.now(UTC)
+    token = uuid.uuid4().hex
     with session_scope() as session:
         result: CursorResult[Any] = session.execute(  # type: ignore[assignment]
             update(Incident)
@@ -250,19 +261,24 @@ def claim_incident(incident_id: uuid.UUID, lease: timedelta) -> bool:
                 status="processing",
                 job_attempts=Incident.job_attempts + 1,
                 lease_expires_at=now + lease,
+                claim_token=token,
                 updated_at=now,
             )
         )
-        return result.rowcount == 1
+        return token if result.rowcount == 1 else None
 
 
-def renew_lease(incident_id: uuid.UUID, lease: timedelta) -> bool:
-    """Extend this worker's claim. False if the incident is no longer `processing` (finished or reclaimed)."""
+def renew_lease(incident_id: uuid.UUID, claim_token: str, lease: timedelta) -> bool:
+    """Extend this worker's claim. False once the incident finished or another worker reclaimed it."""
     now = datetime.now(UTC)
     with session_scope() as session:
         result: CursorResult[Any] = session.execute(  # type: ignore[assignment]
             update(Incident)
-            .where(Incident.id == incident_id, Incident.status == "processing")
+            .where(
+                Incident.id == incident_id,
+                Incident.status == "processing",
+                Incident.claim_token == claim_token,
+            )
             .values(lease_expires_at=now + lease)
         )
         return result.rowcount == 1
@@ -274,11 +290,13 @@ def claim_next(lease: timedelta, scan: int = 10) -> dict[str, Any] | None:
     with session_scope() as session:
         candidates = list(session.scalars(stmt))
     for incident_id in candidates:  # another worker may win a race for any single row; try the next one
-        if claim_incident(incident_id, lease):
+        token = claim_incident(incident_id, lease)
+        if token:
             with session_scope() as session:
                 row = session.get(Incident, incident_id)
                 if row is not None:
                     return {
+                        "claim_token": token,
                         "incident_id": row.id,
                         "repo_name": row.repo_name,
                         "error_message": row.error_message,

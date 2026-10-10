@@ -43,7 +43,7 @@ which waits for an **explicit human approval** and is never merged automatically
 | Persistence | PostgreSQL/Neon via SQLAlchemy 2, Alembic migrations, failure taxonomy (`error_category`) |
 | Observability | Structured JSON logs with incident correlation and secret redaction; Langfuse v4 traces with content masking by default; Prometheus `/metrics` (content-free labels) |
 | Evaluation | 26-case synthetic RCA dataset, deterministic metrics, mock and live modes; labelled retrieval dataset comparing two ranking strategies |
-| Delivery | 199 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
+| Delivery | 204 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
 
 ## Architecture
 
@@ -103,7 +103,9 @@ retry to open a second PR.
 
 **Durable queue.** Submitted incidents are `queued` rows. Workers claim one with a compare-and-set update
 (`queued -> processing`) that also sets a lease (`JOB_LEASE_SECONDS`, default 5 min) which the worker renews every
-lease/3 while it analyses. If a worker dies, the lease expires and the incident is queued again; after
+lease/3 while it analyses. Each claim carries a token: only the current holder can renew it or write the
+result, so a worker that lost its claim (e.g. after a long pause) discards its result before any remediation.
+If a worker dies, the lease expires and the incident is queued again; after
 `MAX_JOB_ATTEMPTS` claims it fails as `interrupted`. The same mechanism works on PostgreSQL and SQLite, and any
 number of workers can run.
 
@@ -240,6 +242,19 @@ runs.
 | structured_output_validity (per attempt) | 0.81 (21/26) | **0.61** (20/33) - worse |
 | average attempts per case | 1.18 | **1.50** - more cost |
 
+**prompt v4 (2026-10-10, all 26 cases, no provider failures):** the per-attempt schema errors recorded by v3
+were empty `uncertainties` lists and unrecognised `source` values on inference items. v4 states both rules
+explicitly, and the schema normalises unrecognised sources on *unverified* (inference/hypothesis) items only.
+
+| Metric (26 cases) | prompt v4 + gate v4 |
+|---|---|
+| structured_output_validity (per attempt) | **0.91** (31/34) |
+| category_accuracy | 0.82 (18/22) |
+| false_acceptance_rate | 0.14 (3/21) |
+| inconclusive_not_accepted_rate | 1.00 (4/4) |
+| evidence_grounding_accuracy | 1.00 (52/52) |
+| average attempts per case | 1.31 |
+
 What the first live run showed, and what changed:
 
 - **The model did not fabricate evidence**: every "observed" quote was verbatim in the retrieved data (50/50).
@@ -252,9 +267,9 @@ What the first live run showed, and what changed:
 - **Category confusion** (e.g. a missing env var classified as `missing_key`): `rca-prompt-v3` defines each
   category by root cause. **Caveat:** the definitions were written after seeing the live failures on this same
   dataset, so the category gain is optimistic; a held-out set is needed to confirm it.
-- **Trade-off not yet solved:** first attempts are now schema-invalid more often (retries fix them, at ~27% more
-  calls). Each attempt now records the failing schema fields (`schema_error_fields`) to diagnose this in the next
-  run.
+- **Schema regression (v3) fixed in v4**, diagnosed from the per-attempt `schema_error_fields`.
+- One case (`api-invalid-json`) produced valid JSON with whole sections missing in two attempts and a non-JSON
+  reply in the third; it ends in `needs_review` rather than being accepted with an incomplete analysis.
 
 Practical note: one full live run costs roughly 100-125k tokens with this model, i.e. about one run per day on
 Groq's free tier. Use `--sleep` to stay under the per-minute limit and `--case` to re-run selected cases.
@@ -483,7 +498,7 @@ stack traces or connection strings. Re-sending a request with the same `incident
 ## Testing and CI
 
 ```bash
-pytest                               # 199 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
+pytest                               # 204 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
 pytest --cov=src --cov=evals         # coverage (87% total at time of writing)
 ruff check src tests evals scripts migrations && ruff format --check src tests evals scripts migrations
 mypy                                 # src/
@@ -563,8 +578,7 @@ pipeline, gate and sandboxed verification - **not** the model's ability. PR crea
 
 ## Roadmap
 
-- A held-out evaluation set (cases not used while tuning prompt v3) and more real-world-shaped cases.
-- Reduce first-attempt schema errors under prompt v3 (diagnose with `schema_error_fields`).
+- More real-world-shaped cases, ideally from real incident post-mortems.
 - More inbound adapters (Alertmanager, Datadog) and per-tenant allow-lists.
 - PostgreSQL full-text search for candidate selection when histories outgrow the 200-row window; evaluate
   embeddings only if lexical recall proves insufficient on real data.

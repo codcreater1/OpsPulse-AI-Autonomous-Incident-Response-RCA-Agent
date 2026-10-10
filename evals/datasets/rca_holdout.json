@@ -1,0 +1,327 @@
+{
+  "version": "rca-holdout-v1",
+  "cases": [
+    {
+      "id": "ho-none-config",
+      "scenario": "Config loader returns None for an unknown section",
+      "repo_name": "eval/billing",
+      "error_message": "AttributeError: 'NoneType' object has no attribute 'get'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/settings.py\", line 6, in request_timeout\n    return config.get(\"timeout\", 30)\nAttributeError: 'NoneType' object has no attribute 'get'",
+      "files": {
+        "app/settings.py": "from app.loader import load_config\n\n\ndef request_timeout():\n    config = load_config(\"payments\")\n    return config.get(\"timeout\", 30)\n"
+      },
+      "history": [],
+      "expected": {
+        "inconclusive": false,
+        "relevant_files": [
+          "app/settings.py"
+        ],
+        "root_cause_category": "null_reference"
+      },
+      "mock_replies": [
+        {
+          "category": "null_reference",
+          "quote": "config.get(\"timeout\", 30)",
+          "fix": {
+            "old": "    return config.get(\"timeout\", 30)\n",
+            "new": "    return (config or {}).get(\"timeout\", 30)\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ho-env-int",
+      "scenario": "Environment variable set to a non-numeric value",
+      "repo_name": "eval/billing",
+      "error_message": "ValueError: invalid literal for int() with base 10: 'auto'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/pool.py\", line 3, in <module>\n    MAX_WORKERS = int(os.environ[\"MAX_WORKERS\"])\nValueError: invalid literal for int() with base 10: 'auto'",
+      "files": {
+        "app/pool.py": "import os\n\nMAX_WORKERS = int(os.environ[\"MAX_WORKERS\"])\n"
+      },
+      "history": [],
+      "expected": {
+        "inconclusive": false,
+        "relevant_files": [
+          "app/pool.py"
+        ],
+        "root_cause_category": "configuration_error"
+      },
+      "mock_replies": [
+        {
+          "category": "configuration_error",
+          "quote": "int(os.environ[\"MAX_WORKERS\"])",
+          "fix": null,
+          "confidence": 0.6
+        }
+      ]
+    },
+    {
+      "id": "ho-redis-down",
+      "scenario": "Cache server unreachable",
+      "repo_name": "eval/billing",
+      "error_message": "redis.exceptions.ConnectionError: Error 111 connecting to redis:6379. Connection refused.",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/cache.py\", line 7, in cached_rate\n    return client.get(f\"rate:{currency}\")\nredis.exceptions.ConnectionError: Error 111 connecting to redis:6379. Connection refused.",
+      "files": {
+        "app/cache.py": "import redis\n\nclient = redis.Redis(host=\"redis\", port=6379)\n\n\ndef cached_rate(currency):\n    return client.get(f\"rate:{currency}\")\n"
+      },
+      "history": [],
+      "expected": {
+        "inconclusive": false,
+        "relevant_files": [
+          "app/cache.py"
+        ],
+        "root_cause_category": "dependency_unavailable"
+      },
+      "mock_replies": [
+        {
+          "category": "dependency_unavailable",
+          "quote": "client.get(f\"rate:{currency}\")",
+          "fix": null,
+          "confidence": 0.6
+        }
+      ]
+    },
+    {
+      "id": "ho-upstream-shape",
+      "scenario": "Upstream returned an error document without the expected field",
+      "repo_name": "eval/billing",
+      "error_message": "KeyError: 'items'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/search.py\", line 6, in search_repos\n    return [item[\"name\"] for item in payload[\"items\"]]\nKeyError: 'items'",
+      "files": {
+        "app/search.py": "import requests\n\n\ndef search_repos(query):\n    payload = requests.get(\"https://api.example.test/search\", params={\"q\": query}, timeout=5).json()\n    return [item[\"name\"] for item in payload[\"items\"]]\n"
+      },
+      "history": [],
+      "expected": {
+        "inconclusive": false,
+        "relevant_files": [
+          "app/search.py"
+        ],
+        "root_cause_category": "invalid_external_response"
+      },
+      "mock_replies": [
+        {
+          "category": "invalid_external_response",
+          "quote": "payload[\"items\"]",
+          "fix": {
+            "old": "for item in payload[\"items\"]]",
+            "new": "for item in payload.get(\"items\", [])]"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ho-typo-method",
+      "scenario": "Misspelled method name",
+      "repo_name": "eval/billing",
+      "error_message": "AttributeError: 'User' object has no attribute 'get_ful_name'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/users.py\", line 10, in greeting\n    return \"Hello \" + user.get_ful_name()\nAttributeError: 'User' object has no attribute 'get_ful_name'",
+      "files": {
+        "app/users.py": "class User:\n    def __init__(self, first, last):\n        self.first, self.last = first, last\n\n    def get_full_name(self):\n        return f\"{self.first} {self.last}\"\n\n\ndef greeting(user):\n    return \"Hello \" + user.get_ful_name()\n"
+      },
+      "history": [],
+      "expected": {
+        "inconclusive": false,
+        "relevant_files": [
+          "app/users.py"
+        ],
+        "root_cause_category": "attribute_error"
+      },
+      "mock_replies": [
+        {
+          "category": "attribute_error",
+          "quote": "user.get_ful_name()",
+          "fix": {
+            "old": "get_ful_name()",
+            "new": "get_full_name()"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ho-internal-key",
+      "scenario": "Internal defaults dictionary lacks a key",
+      "repo_name": "eval/billing",
+      "error_message": "KeyError: 'theme'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/prefs.py\", line 5, in theme\n    return _PREFERENCES[\"theme\"]\nKeyError: 'theme'",
+      "files": {
+        "app/prefs.py": "_PREFERENCES = {\"language\": \"en\"}\n\n\ndef theme():\n    return _PREFERENCES[\"theme\"]\n"
+      },
+      "history": [],
+      "expected": {
+        "inconclusive": false,
+        "relevant_files": [
+          "app/prefs.py"
+        ],
+        "root_cause_category": "missing_key"
+      },
+      "mock_replies": [
+        {
+          "category": "missing_key",
+          "quote": "_PREFERENCES[\"theme\"]",
+          "fix": {
+            "old": "_PREFERENCES[\"theme\"]",
+            "new": "_PREFERENCES.get(\"theme\", \"light\")"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ho-str-price",
+      "scenario": "Price parsed from CSV is still a string",
+      "repo_name": "eval/billing",
+      "error_message": "TypeError: can't multiply sequence by non-int of type 'float'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/csv_import.py\", line 3, in line_total\n    return price * row[\"quantity\"] * 1.2\nTypeError: can't multiply sequence by non-int of type 'float'",
+      "files": {
+        "app/csv_import.py": "def line_total(row):\n    price = row[\"price\"]\n    return price * row[\"quantity\"] * 1.2\n"
+      },
+      "history": [],
+      "expected": {
+        "inconclusive": false,
+        "relevant_files": [
+          "app/csv_import.py"
+        ],
+        "root_cause_category": "type_error"
+      },
+      "mock_replies": [
+        {
+          "category": "type_error",
+          "quote": "price = row[\"price\"]",
+          "fix": {
+            "old": "    price = row[\"price\"]\n",
+            "new": "    price = float(row[\"price\"])\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ho-off-by-one",
+      "scenario": "Loop runs one index past the end",
+      "repo_name": "eval/billing",
+      "error_message": "IndexError: list index out of range",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/pages.py\", line 4, in last_page_titles\n    titles.append(pages[i][\"title\"])\nIndexError: list index out of range",
+      "files": {
+        "app/pages.py": "def last_page_titles(pages):\n    titles = []\n    for i in range(len(pages) + 1):\n        titles.append(pages[i][\"title\"])\n    return titles\n"
+      },
+      "history": [],
+      "expected": {
+        "inconclusive": false,
+        "relevant_files": [
+          "app/pages.py"
+        ],
+        "root_cause_category": "logic_error"
+      },
+      "mock_replies": [
+        {
+          "category": "logic_error",
+          "quote": "range(len(pages) + 1)",
+          "fix": {
+            "old": "range(len(pages) + 1)",
+            "new": "range(len(pages))"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ho-missing-package",
+      "scenario": "Dependency not installed in the image",
+      "repo_name": "eval/billing",
+      "error_message": "ModuleNotFoundError: No module named 'dateutil'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/dates.py\", line 1, in <module>\n    from dateutil import parser\nModuleNotFoundError: No module named 'dateutil'",
+      "files": {
+        "app/dates.py": "from dateutil import parser\n\n\ndef parse_due(text):\n    return parser.isoparse(text)\n"
+      },
+      "history": [],
+      "expected": {
+        "inconclusive": false,
+        "relevant_files": [
+          "app/dates.py"
+        ],
+        "root_cause_category": "import_error"
+      },
+      "mock_replies": [
+        {
+          "category": "import_error",
+          "quote": "from dateutil import parser",
+          "fix": null,
+          "confidence": 0.6
+        }
+      ]
+    },
+    {
+      "id": "ho-gateway-timeout",
+      "scenario": "Only a proxy error page, no application trace",
+      "repo_name": "eval/billing",
+      "error_message": "504 Gateway Timeout",
+      "stack_trace": "",
+      "files": {},
+      "history": [],
+      "expected": {
+        "inconclusive": true,
+        "relevant_files": [],
+        "root_cause_category": "unknown"
+      },
+      "mock_replies": [
+        {
+          "category": "unknown",
+          "quote": null,
+          "fix": null,
+          "sufficient": false,
+          "confidence": 0.1
+        }
+      ]
+    },
+    {
+      "id": "ho-drift-attribute",
+      "scenario": "Deployed code differs from HEAD: error names discount_code, code reads coupon",
+      "repo_name": "eval/billing",
+      "error_message": "AttributeError: 'Order' object has no attribute 'discount_code'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/orders.py\", line 2, in coupon_of\n    return order.coupon.code\nAttributeError: 'Order' object has no attribute 'discount_code'",
+      "files": {
+        "app/orders.py": "def coupon_of(order):\n    return order.coupon.code\n"
+      },
+      "history": [],
+      "expected": {
+        "inconclusive": true,
+        "relevant_files": [
+          "app/orders.py"
+        ],
+        "root_cause_category": "attribute_error"
+      },
+      "mock_replies": [
+        {
+          "category": "unknown",
+          "quote": "return order.coupon.code",
+          "fix": null,
+          "sufficient": false,
+          "confidence": 0.2
+        }
+      ]
+    },
+    {
+      "id": "ho-pool-timeout",
+      "scenario": "HTTP connection pool exhausted towards the payment provider",
+      "repo_name": "eval/billing",
+      "error_message": "httpx.PoolTimeout",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/pay.py\", line 7, in charge\n    return client.post(\"https://pay.example.test/charge\", json=payload).json()\nhttpx.PoolTimeout",
+      "files": {
+        "app/pay.py": "import httpx\n\nclient = httpx.Client(limits=httpx.Limits(max_connections=2), timeout=5.0)\n\n\ndef charge(payload):\n    return client.post(\"https://pay.example.test/charge\", json=payload).json()\n"
+      },
+      "history": [],
+      "expected": {
+        "inconclusive": false,
+        "relevant_files": [
+          "app/pay.py"
+        ],
+        "root_cause_category": "dependency_unavailable"
+      },
+      "mock_replies": [
+        {
+          "category": "dependency_unavailable",
+          "quote": "max_connections=2",
+          "fix": null,
+          "confidence": 0.5
+        }
+      ]
+    }
+  ]
+}

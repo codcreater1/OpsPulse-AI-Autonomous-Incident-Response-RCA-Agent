@@ -51,9 +51,9 @@ def main() -> int:
         incident_service.submit_incident(
             incident_id, case.repo_name, case.error_message, case.stack_trace, submitted_by="demo-reporter"
         )
-        incident_service.claim_for_inline_run(incident_id)  # take it off the queue, as `wait=true` does
+        claim = incident_service.claim_for_inline_run(incident_id)  # take it off the queue, as `wait=true` does
         result = incident_service.run_incident_pipeline(
-            incident_id, case.repo_name, case.error_message, case.stack_trace, graph=graph
+            incident_id, case.repo_name, case.error_message, case.stack_trace, graph=graph, claim_token=claim
         )
         print(f"{case_id:28} -> {result['status']:20} score={result['quality_score']:.2f}")
     print("\nOpen http://localhost:8000/console and connect with a reviewer or admin key.")

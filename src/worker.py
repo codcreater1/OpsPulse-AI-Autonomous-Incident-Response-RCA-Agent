@@ -34,8 +34,11 @@ class LeaseHeartbeat:
     """Renews a claim every lease/3 while the analysis runs, so the lease can be short (fast crash recovery)
     without a slow analysis being reclaimed by another worker. Renewal failures are logged, never raised."""
 
-    def __init__(self, incident_id: uuid.UUID, lease: timedelta, interval: float | None = None) -> None:
+    def __init__(
+        self, incident_id: uuid.UUID, claim_token: str, lease: timedelta, interval: float | None = None
+    ) -> None:
         self.incident_id = incident_id
+        self.claim_token = claim_token
         self.lease = lease
         self.interval = interval if interval is not None else max(lease.total_seconds() / 3, 1.0)
         self._stop = threading.Event()
@@ -45,7 +48,7 @@ class LeaseHeartbeat:
     def _run(self) -> None:
         while not self._stop.wait(self.interval):
             try:
-                if not repositories.renew_lease(self.incident_id, self.lease):
+                if not repositories.renew_lease(self.incident_id, self.claim_token, self.lease):
                     return  # finished or no longer ours
                 self.renewals += 1
             except SQLAlchemyError as exc:
@@ -90,9 +93,13 @@ class Worker:
         if job is None:
             return False
         logger.info("claimed incident %s (claim %d)", job["incident_id"], job["job_attempts"])
-        with LeaseHeartbeat(job["incident_id"], self.lease):
+        with LeaseHeartbeat(job["incident_id"], job["claim_token"], self.lease):
             incident_service.run_incident_pipeline(
-                job["incident_id"], job["repo_name"], job["error_message"], job["stack_trace"]
+                job["incident_id"],
+                job["repo_name"],
+                job["error_message"],
+                job["stack_trace"],
+                claim_token=job["claim_token"],
             )
         return True
 

@@ -20,13 +20,17 @@ from typing import Any
 
 os.environ.setdefault("DATABASE_URL", "sqlite://")  # the workflow under evaluation never touches the database
 
-from evals.dataset import load_rca_dataset
+from evals.dataset import DATASETS, load_rca_dataset
 from evals.harness import ScriptedModel, run_case
 from evals.metrics import compute_metrics
 from src.config import settings
 from src.versions import run_metadata
 
 REPORTS = pathlib.Path(__file__).with_name("reports")
+DATASET_FILES = {
+    "tuning": DATASETS / "rca_cases.json",  # used while developing prompts and the gate
+    "holdout": DATASETS / "rca_holdout.json",  # never used for tuning
+}
 
 
 def _summary(report: dict[str, Any]) -> str:
@@ -67,11 +71,15 @@ def _summary(report: dict[str, Any]) -> str:
 
 
 def run(
-    mode: str, case_ids: list[str] | None = None, out_dir: pathlib.Path = REPORTS, sleep_seconds: float = 1.0
+    mode: str,
+    case_ids: list[str] | None = None,
+    out_dir: pathlib.Path = REPORTS,
+    sleep_seconds: float = 1.0,
+    dataset_name: str = "tuning",
 ) -> dict[str, Any]:
     if mode == "live" and not settings.groq_api_key:
         raise SystemExit("live mode needs GROQ_API_KEY")
-    dataset = load_rca_dataset()
+    dataset = load_rca_dataset(DATASET_FILES[dataset_name])
     cases = [c for c in dataset.cases if not case_ids or c.id in case_ids]
     started = datetime.now(UTC)
     results = []
@@ -92,7 +100,7 @@ def run(
         "results": results,
     }
     out_dir.mkdir(parents=True, exist_ok=True)
-    stem = out_dir / f"rca-{mode}-{started.strftime('%Y%m%dT%H%M%SZ')}"
+    stem = out_dir / f"rca-{dataset_name}-{mode}-{started.strftime('%Y%m%dT%H%M%SZ')}"
     stem.with_suffix(".json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     stem.with_suffix(".md").write_text(_summary(report), encoding="utf-8")
     report["paths"] = [str(stem.with_suffix(".json")), str(stem.with_suffix(".md"))]
@@ -112,6 +120,7 @@ def _check_minimums(metrics: dict[str, Any], minimums: list[str]) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mode", choices=("mock", "live"), default="mock")
+    parser.add_argument("--dataset", choices=tuple(DATASET_FILES), default="tuning")
     parser.add_argument("--case", action="append", dest="cases", help="run only this case id (repeatable)")
     parser.add_argument("--out", type=pathlib.Path, default=REPORTS)
     parser.add_argument("--sleep", type=float, default=1.0, help="seconds between cases in live mode")
@@ -139,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         args.rescore.with_suffix(".md").write_text(_summary(report), encoding="utf-8")
         print(_summary(report))
         return 0
-    report = run(args.mode, args.cases, args.out, args.sleep)
+    report = run(args.mode, args.cases, args.out, args.sleep, args.dataset)
     print(_summary(report))
     print("reports:", *report["paths"], sep="\n  ")
     failures = _check_minimums(report["metrics"], args.min)

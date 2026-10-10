@@ -131,10 +131,11 @@ def submit_incident(
         return JSONResponse(status_code=200, content=IncidentResult(**row).model_dump(mode="json"))
     if wait:
         try:
-            if not incident_service.claim_for_inline_run(incident_id):  # a worker was faster
+            claim = incident_service.claim_for_inline_run(incident_id)
+            if not claim:  # a worker was faster
                 return IncidentAccepted(incident_id=str(incident_id), status="processing")
             result = incident_service.run_incident_pipeline(
-                incident_id, payload.repo_name, payload.error_message, payload.stack_trace
+                incident_id, payload.repo_name, payload.error_message, payload.stack_trace, claim_token=claim
             )
         except DatabaseUnavailableError as exc:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "database unavailable") from exc

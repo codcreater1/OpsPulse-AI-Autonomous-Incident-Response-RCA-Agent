@@ -46,8 +46,8 @@ def test_async_submission_is_queued_then_processed_by_a_worker(client, fake_llm,
 
 def test_a_claim_can_only_be_won_once():
     incident_id = _queued()
-    assert repositories.claim_incident(incident_id, LEASE) is True
-    assert repositories.claim_incident(incident_id, LEASE) is False
+    assert repositories.claim_incident(incident_id, LEASE)
+    assert repositories.claim_incident(incident_id, LEASE) is None
     assert repositories.claim_next(LEASE) is None
 
 
@@ -122,8 +122,8 @@ def test_heartbeat_renews_the_lease_while_work_runs_and_stops_after():
     from src.worker import LeaseHeartbeat
 
     incident_id = _queued()
-    repositories.claim_incident(incident_id, timedelta(seconds=1))
-    with LeaseHeartbeat(incident_id, timedelta(minutes=5), interval=0.05) as heartbeat:
+    token = repositories.claim_incident(incident_id, timedelta(seconds=1))
+    with LeaseHeartbeat(incident_id, token, timedelta(minutes=5), interval=0.05) as heartbeat:
         time.sleep(0.3)
     assert heartbeat.renewals >= 2
     with session_scope() as session:
@@ -135,6 +135,38 @@ def test_heartbeat_renews_the_lease_while_work_runs_and_stops_after():
 
 def test_heartbeat_stops_renewing_once_the_incident_is_finished():
     incident_id = _queued()
-    repositories.claim_incident(incident_id, LEASE)
+    token = repositories.claim_incident(incident_id, LEASE)
     repositories.update_incident(incident_id, status="analysis_ready")
-    assert repositories.renew_lease(incident_id, LEASE) is False
+    assert repositories.renew_lease(incident_id, token, LEASE) is False
+
+
+def test_only_the_current_claim_can_renew_or_write():
+    from src.db.repositories import ClaimLostError
+
+    incident_id = _queued()
+    stale = repositories.claim_incident(incident_id, LEASE)
+    _expire(incident_id)
+    Worker().recover_expired()  # back to the queue
+    fresh = repositories.claim_incident(incident_id, LEASE)
+    assert fresh and fresh != stale
+    assert repositories.renew_lease(incident_id, stale, LEASE) is False
+    assert repositories.renew_lease(incident_id, fresh, LEASE) is True
+    with pytest.raises(ClaimLostError):
+        repositories.update_incident(incident_id, expected_claim_token=stale, status="analysis_ready")
+    repositories.update_incident(incident_id, expected_claim_token=fresh, status="analysis_ready")
+
+
+def test_a_worker_that_lost_its_claim_discards_its_result_and_proposes_nothing(
+    client, fake_llm, source_fetch, set_settings
+):
+    from src.db.repositories import get_pending_approval
+
+    set_settings(enable_github_remediation=True, github_token="test-token", require_remediation_approval=True)
+    fake_llm([make_analysis()])
+    incident_id = _queued()
+    stale = repositories.claim_incident(incident_id, LEASE)
+    _expire(incident_id)
+    Worker().recover_expired()
+    repositories.claim_incident(incident_id, LEASE)  # another worker now owns it
+    result = incident_service.run_incident_pipeline(incident_id, "o/r", "TypeError: x", "trace", claim_token=stale)
+    assert result["status"] == "processing" and get_pending_approval(incident_id) is None

@@ -6,7 +6,7 @@ Truthfulness is checked separately by the deterministic evaluator (src/agent/eva
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -60,6 +60,20 @@ class EvidenceItem(_Model):
     claim: Text
     source: EvidenceSource
     quote: str = Field(default="", max_length=1000)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalise_unverified_source(cls, data: Any) -> Any:
+        """Inference/hypothesis items are never quote-checked, so an unrecognised `source` there carries no
+        meaning; normalise it to "none". `observed` items keep strict validation (their source is verified)."""
+        known = ("stack_trace", "code_context", "historical_incidents", "none")
+        if (
+            isinstance(data, dict)
+            and data.get("kind") in ("inference", "hypothesis")
+            and data.get("source") not in known
+        ):
+            return {**data, "source": "none"}
+        return data
 
 
 class PrimaryRootCause(_Model):

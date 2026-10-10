@@ -128,3 +128,13 @@ def test_provider_failures_are_excluded_from_quality_metrics_and_listed():
     assert m["cases_not_evaluated"] == ["x"]
     assert m["category_accuracy"]["denominator"] == 1 and m["category_accuracy"]["value"] == 1.0
     assert m["workflow_failure_rate"]["numerator"] == 1  # still visible as an operational failure
+
+
+def test_holdout_set_is_valid_and_disjoint_from_the_tuning_set():
+    from evals.run_rca import DATASET_FILES
+
+    tuning = load_rca_dataset(DATASET_FILES["tuning"])
+    holdout = load_rca_dataset(DATASET_FILES["holdout"])
+    assert len(holdout.cases) >= 10 and sum(c.expected.inconclusive for c in holdout.cases) >= 2
+    assert not {c.id for c in tuning.cases} & {c.id for c in holdout.cases}
+    assert not {c.error_message for c in tuning.cases} & {c.error_message for c in holdout.cases}

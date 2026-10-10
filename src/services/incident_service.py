@@ -120,8 +120,12 @@ def run_incident_pipeline(
     error_message: str,
     stack_trace: str,
     graph: CompiledStateGraph | None = None,
+    claim_token: str | None = None,
 ) -> dict[str, Any]:
     """Run the graph, persist the outcome, optionally propose/open a PR. Returns the stored incident.
+
+    With `claim_token`, every write requires that claim to still own the incident; if another worker took it
+    over (expired lease), this run's result is discarded before any remediation side effect.
 
     Raises DatabaseUnavailableError when the outcome cannot be persisted; no PR is attempted in that case,
     because the duplicate-PR guard and the approval record depend on the database.
@@ -131,7 +135,14 @@ def run_incident_pipeline(
     started = time.perf_counter()
     try:
         with incident_trace(str(incident_id), repo_name, fingerprint) as trace:
-            result = _run(incident_id, repo_name, error_message, stack_trace, fingerprint, graph or get_graph())
+            try:
+                result = _run(
+                    incident_id, repo_name, error_message, stack_trace, fingerprint, graph or get_graph(), claim_token
+                )
+            except repositories.ClaimLostError:
+                logger.warning("claim lost to another worker; discarding this run's result")
+                trace.update(error="claim_lost")
+                return _load(incident_id)
             metrics.PIPELINE_SECONDS.observe(time.perf_counter() - started)
             metrics.record_incident(result["status"], result["error_category"])
             trace.update(
@@ -152,6 +163,7 @@ def _run(
     stack_trace: str,
     fingerprint: str,
     graph: CompiledStateGraph,
+    claim_token: str | None = None,
 ) -> dict[str, Any]:
     state = initial_state(str(incident_id), error_message, stack_trace, repo_name)
     try:
@@ -162,6 +174,7 @@ def _run(
         logger.exception("workflow crashed")
         _persist_or_raise(
             incident_id,
+            claim_token=claim_token,
             status="failed",
             status_reason="internal error during analysis",
             error_category=ErrorCategory.INTERNAL_ERROR.value,
@@ -170,6 +183,7 @@ def _run(
 
     _persist_or_raise(
         incident_id,
+        claim_token=claim_token,
         error_message=final["error_message"],
         stack_trace=final["stack_trace"],
         affected_file=final["affected_file"],
@@ -184,10 +198,12 @@ def _run(
         except SQLAlchemyError as exc:
             logger.error("database unavailable during remediation: %s", type(exc).__name__)
             raise DatabaseUnavailableError("database unavailable") from exc
-        _persist_or_raise(incident_id, **_outcome_fields(outcome))
+        _persist_or_raise(incident_id, claim_token=claim_token, **_outcome_fields(outcome))
     else:
         status, reason, category = _final_status(final)
-        _persist_or_raise(incident_id, status=status, status_reason=redact(reason), error_category=category)
+        _persist_or_raise(
+            incident_id, claim_token=claim_token, status=status, status_reason=redact(reason), error_category=category
+        )
     result = _load(incident_id)
     logger.info(
         "incident finished: status=%s score=%.2f attempts=%d",
@@ -252,17 +268,17 @@ def decide_remediation(
         incident_id_var.reset(token)
 
 
-def claim_for_inline_run(incident_id: uuid.UUID) -> bool:
-    """Used by `wait=true`: take the incident off the queue before any worker does."""
+def claim_for_inline_run(incident_id: uuid.UUID) -> str | None:
+    """Used by `wait=true`: take the incident off the queue before any worker does. Returns the claim token."""
     try:
         return repositories.claim_incident(incident_id, timedelta(seconds=settings.job_lease_seconds))
     except SQLAlchemyError as exc:
         raise DatabaseUnavailableError("database unavailable") from exc
 
 
-def _persist_or_raise(incident_id: uuid.UUID, **fields: Any) -> None:
+def _persist_or_raise(incident_id: uuid.UUID, claim_token: str | None = None, **fields: Any) -> None:
     try:
-        repositories.update_incident(incident_id, **fields)
+        repositories.update_incident(incident_id, expected_claim_token=claim_token, **fields)
     except SQLAlchemyError as exc:
         logger.error("database unavailable while saving incident: %s", type(exc).__name__)
         raise DatabaseUnavailableError("database unavailable") from exc

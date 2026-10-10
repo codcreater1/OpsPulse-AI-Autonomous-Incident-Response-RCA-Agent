@@ -97,3 +97,16 @@ def test_schema_example_shows_correct_json_newline_escaping():
     # (an escaped backslash, which would teach the model to emit literal backslashes instead of newlines).
     assert r"file.ext\n+++ b/path" in RCA_SYSTEM_PROMPT
     assert r"file.ext\\n" not in RCA_SYSTEM_PROMPT
+
+
+def test_unrecognised_source_is_normalised_only_for_unverified_evidence():
+    raw = make_analysis()
+    raw["evidence"][2]["source"] = "reasoning"  # an inference item
+    assert RCAOutput.model_validate(raw).evidence[2].source == "none"
+    raw["evidence"][0]["source"] = "logs"  # an observed item: must stay strict
+    with pytest.raises(ValidationError):
+        RCAOutput.model_validate(raw)
+
+
+def test_prompt_states_that_uncertainties_are_never_empty():
+    assert '"uncertainties" is NEVER empty' in RCA_SYSTEM_PROMPT
