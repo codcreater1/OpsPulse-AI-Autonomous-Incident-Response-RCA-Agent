@@ -145,6 +145,8 @@ class Settings:
     embedded_worker: bool = field(default_factory=lambda: _bool("EMBEDDED_WORKER", True))
     worker_poll_seconds: float = field(default_factory=lambda: _number(("WORKER_POLL_SECONDS",), 1.0, float, 0.1, 60))
     job_lease_seconds: int = field(default_factory=lambda: int(_number(("JOB_LEASE_SECONDS",), 300, int, 30, 86_400)))
+    # Touched by the worker loop and lease heartbeat; `python -m src.worker --healthcheck` checks its age.
+    worker_liveness_file: str = field(default_factory=lambda: _env("WORKER_LIVENESS_FILE"))
     max_job_attempts: int = field(default_factory=lambda: int(_number(("MAX_JOB_ATTEMPTS",), 2, int, 1, 10)))
     # Claims allowed for incidents that keep hitting transient provider errors (rate limit, timeout, outage).
     max_transient_retries: int = field(default_factory=lambda: int(_number(("MAX_TRANSIENT_RETRIES",), 3, int, 0, 10)))

@@ -10,8 +10,11 @@ Any number of workers may run against the same database: claims are compare-and-
 from __future__ import annotations
 
 import logging
+import pathlib
 import signal
+import sys
 import threading
+import time
 import uuid
 from datetime import timedelta
 from types import FrameType
@@ -30,6 +33,25 @@ logger = logging.getLogger(__name__)
 MAX_BACKOFF_SECONDS = 30.0
 
 
+def touch_liveness() -> None:
+    """Record that this worker is alive (polling or analysing); read by the container healthcheck."""
+    if not settings.worker_liveness_file:
+        return
+    try:
+        pathlib.Path(settings.worker_liveness_file).touch()
+    except OSError as exc:
+        logger.warning("could not update the liveness file: %s", type(exc).__name__)
+
+
+def is_alive(max_age_seconds: float = 120.0) -> bool:
+    """Healthcheck helper: True if the liveness file was touched within `max_age_seconds`."""
+    try:
+        age = time.time() - pathlib.Path(settings.worker_liveness_file).stat().st_mtime
+    except OSError:
+        return False
+    return age <= max_age_seconds
+
+
 class LeaseHeartbeat:
     """Renews a claim every lease/3 while the analysis runs, so the lease can be short (fast crash recovery)
     without a slow analysis being reclaimed by another worker. Renewal failures are logged, never raised."""
@@ -40,13 +62,15 @@ class LeaseHeartbeat:
         self.incident_id = incident_id
         self.claim_token = claim_token
         self.lease = lease
-        self.interval = interval if interval is not None else max(lease.total_seconds() / 3, 1.0)
+        # Renew well before expiry; never wait longer than 30 s so liveness (below) stays fresh during analysis.
+        self.interval = interval if interval is not None else min(max(lease.total_seconds() / 3, 1.0), 30.0)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="opspulse-lease", daemon=True)
         self.renewals = 0
 
     def _run(self) -> None:
         while not self._stop.wait(self.interval):
+            touch_liveness()
             try:
                 if not repositories.renew_lease(self.incident_id, self.claim_token, self.lease):
                     return  # finished or no longer ours
@@ -106,6 +130,7 @@ class Worker:
     def run_forever(self) -> None:
         backoff = settings.worker_poll_seconds
         while not self._stop.is_set():
+            touch_liveness()
             try:
                 busy = self.run_once()
                 backoff = settings.worker_poll_seconds
@@ -131,6 +156,8 @@ class Worker:
 
 
 def main() -> int:
+    if sys.argv[1:] == ["--healthcheck"]:
+        return 0 if is_alive() else 1
     from src.logging_config import configure_logging
 
     configure_logging(settings.log_level)

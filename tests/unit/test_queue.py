@@ -170,3 +170,22 @@ def test_a_worker_that_lost_its_claim_discards_its_result_and_proposes_nothing(
     repositories.claim_incident(incident_id, LEASE)  # another worker now owns it
     result = incident_service.run_incident_pipeline(incident_id, "o/r", "TypeError: x", "trace", claim_token=stale)
     assert result["status"] == "processing" and get_pending_approval(incident_id) is None
+
+
+def test_worker_liveness_file_is_touched_and_checked(tmp_path, set_settings):
+    import os
+    import time
+
+    from src.worker import is_alive, touch_liveness
+
+    marker = tmp_path / "alive"
+    set_settings(worker_liveness_file=str(marker))
+    assert is_alive() is False  # never touched
+    touch_liveness()
+    assert is_alive() is True
+    old = time.time() - 600
+    os.utime(marker, (old, old))
+    assert is_alive() is False  # stale: the healthcheck would fail
+    Worker().run_once()
+    touch_liveness()
+    assert is_alive() is True

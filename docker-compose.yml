@@ -40,8 +40,14 @@ services:
     command: ["python", "-m", "src.worker"]
     environment:
       DATABASE_URL: postgresql://opspulse:opspulse-local-only@db:5432/opspulse
+      WORKER_LIVENESS_FILE: /tmp/opspulse-worker-alive
+    # Liveness: the worker touches the file on every loop and every lease renewal (<= 30 s apart).
     healthcheck:
-      disable: true
+      test: ["CMD", "python", "-m", "src.worker", "--healthcheck"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     depends_on:
       api:
         condition: service_healthy
