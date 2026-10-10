@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-AGENT_VERSION = "1.1.0-opspulse"
+AGENT_VERSION = "1.2.0-opspulse"
 
 
 class ConfigError(ValueError):

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="852" viewBox="0 0 940 852" role="img" aria-label="Terminal recording of the OpsPulse demo with a scripted model">
+<style>
+  .bg { fill: #0d1117; } .bar { fill: #161b22; }
+  text { font: 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; fill: #c9d1d9; }
+  .cmd { fill: #79c0ff; } .head { fill: #d2a8ff; font-weight: bold; } .ok { fill: #56d364; }
+  .bad { fill: #ff7b72; } .add { fill: #56d364; } .plain { fill: #c9d1d9; }
+  .l { animation: show .25s ease-out backwards; }
+  @keyframes show { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .l { animation: none; } }
+</style>
+<rect class="bg" width="940" height="852" rx="8"/>
+<rect class="bar" width="940" height="30" rx="8"/>
+<circle cx="18" cy="15" r="5" fill="#ff5f56"/><circle cx="36" cy="15" r="5" fill="#ffbd2e"/>
+<circle cx="54" cy="15" r="5" fill="#27c93f"/>
+<text x="470" y="19" text-anchor="middle" style="fill:#8b949e">opspulse-ai - demo (mock model)</text>
+<text x="20" y="46" class="cmd l" style="animation-delay:0.11s" xml:space="preserve">$ python -m scripts.demo        # MOCK model: scripted reply, offline, ~3 s</text>
+<text x="20" y="65" class="plain l" style="animation-delay:0.22s" xml:space="preserve">&#160;</text>
+<text x="20" y="84" class="head l" style="animation-delay:0.78s" xml:space="preserve">=== 1. Service tests before any change</text>
+<text x="20" y="103" class="bad l" style="animation-delay:0.89s" xml:space="preserve">1 failed, 2 passed in 0.44s</text>
+<text x="20" y="122" class="plain l" style="animation-delay:1.00s" xml:space="preserve">&#160;</text>
+<text x="20" y="141" class="head l" style="animation-delay:1.56s" xml:space="preserve">=== 2. Reproduce the production crash</text>
+<text x="20" y="160" class="plain l" style="animation-delay:1.67s" xml:space="preserve">Traceback (most recent call last):</text>
+<text x="20" y="179" class="plain l" style="animation-delay:1.78s" xml:space="preserve">  File &quot;/app/app.py&quot;, line 11, in &lt;module&gt;</text>
+<text x="20" y="198" class="plain l" style="animation-delay:1.89s" xml:space="preserve">    print(handle_order({&quot;sku&quot;: &quot;banana&quot;, &quot;quantity&quot;: 1}))</text>
+<text x="20" y="217" class="plain l" style="animation-delay:2.00s" xml:space="preserve">          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</text>
+<text x="20" y="236" class="plain l" style="animation-delay:2.11s" xml:space="preserve">  File &quot;/app/app.py&quot;, line 7, in handle_order</text>
+<text x="20" y="255" class="plain l" style="animation-delay:2.22s" xml:space="preserve">    return reserve(order[&quot;sku&quot;], order[&quot;quantity&quot;])</text>
+<text x="20" y="274" class="plain l" style="animation-delay:2.33s" xml:space="preserve">           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</text>
+<text x="20" y="293" class="plain l" style="animation-delay:2.44s" xml:space="preserve">  File &quot;/app/inventory.py&quot;, line 11, in reserve</text>
+<text x="20" y="312" class="plain l" style="animation-delay:2.55s" xml:space="preserve">    if available(sku) &gt;= quantity:</text>
+<text x="20" y="331" class="plain l" style="animation-delay:2.66s" xml:space="preserve">       ^^^^^^^^^^^^^^^^^^^^^^^^^^</text>
+<text x="20" y="350" class="bad l" style="animation-delay:2.77s" xml:space="preserve">TypeError: &#x27;&gt;=&#x27; not supported between instances of &#x27;NoneType&#x27; and &#x27;int&#x27;</text>
+<text x="20" y="369" class="plain l" style="animation-delay:2.88s" xml:space="preserve">&#160;</text>
+<text x="20" y="388" class="head l" style="animation-delay:3.44s" xml:space="preserve">=== 3. OpsPulse analysis (MOCK scripted reply)</text>
+<text x="20" y="407" class="ok l" style="animation-delay:3.55s" xml:space="preserve">workflow status: accepted  attempts: 1  quality score: 0.98  gate passed: True</text>
+<text x="20" y="426" class="plain l" style="animation-delay:3.66s" xml:space="preserve">category: null_reference</text>
+<text x="20" y="445" class="plain l" style="animation-delay:3.77s" xml:space="preserve">root cause: scripted null_reference explanation</text>
+<text x="20" y="464" class="plain l" style="animation-delay:3.88s" xml:space="preserve">patch:</text>
+<text x="20" y="483" class="plain l" style="animation-delay:3.99s" xml:space="preserve">--- a/inventory.py</text>
+<text x="20" y="502" class="plain l" style="animation-delay:4.10s" xml:space="preserve">+++ b/inventory.py</text>
+<text x="20" y="521" class="plain l" style="animation-delay:4.21s" xml:space="preserve">@@ -4,7 +4,7 @@</text>
+<text x="20" y="540" class="plain l" style="animation-delay:4.32s" xml:space="preserve"> </text>
+<text x="20" y="559" class="plain l" style="animation-delay:4.43s" xml:space="preserve"> </text>
+<text x="20" y="578" class="plain l" style="animation-delay:4.54s" xml:space="preserve"> def available(sku):</text>
+<text x="20" y="597" class="bad l" style="animation-delay:4.65s" xml:space="preserve">-    return STOCK.get(sku)</text>
+<text x="20" y="616" class="add l" style="animation-delay:4.76s" xml:space="preserve">+    return STOCK.get(sku, 0)</text>
+<text x="20" y="635" class="plain l" style="animation-delay:4.87s" xml:space="preserve"> </text>
+<text x="20" y="654" class="plain l" style="animation-delay:4.98s" xml:space="preserve"> </text>
+<text x="20" y="673" class="plain l" style="animation-delay:5.09s" xml:space="preserve"> def reserve(sku, quantity):</text>
+<text x="20" y="692" class="plain l" style="animation-delay:5.20s" xml:space="preserve">&#160;</text>
+<text x="20" y="711" class="head l" style="animation-delay:5.76s" xml:space="preserve">=== 4. Apply the patch to the sandbox copy and re-run the tests</text>
+<text x="20" y="730" class="ok l" style="animation-delay:5.87s" xml:space="preserve">3 passed in 0.02s</text>
+<text x="20" y="749" class="plain l" style="animation-delay:5.98s" xml:space="preserve">&#160;</text>
+<text x="20" y="768" class="head l" style="animation-delay:6.54s" xml:space="preserve">=== 5. Remediation</text>
+<text x="20" y="787" class="plain l" style="animation-delay:6.65s" xml:space="preserve">Not exercised: with GitHub configured the incident would wait in `awaiting_approval` for a human decision; no P…</text>
+<text x="20" y="806" class="plain l" style="animation-delay:6.76s" xml:space="preserve">&#160;</text>
+<text x="20" y="825" class="ok l" style="animation-delay:6.87s" xml:space="preserve">RESULT: tests pass after the proposed patch</text>
+</svg>

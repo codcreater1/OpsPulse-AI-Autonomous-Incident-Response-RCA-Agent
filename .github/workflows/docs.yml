@@ -1,0 +1,49 @@
+name: Docs
+
+# Builds the documentation site on every change to the docs inputs; deploys to GitHub Pages from main only when
+# the repository variable PAGES_ENABLED is "true" (set it after choosing Settings -> Pages -> Source: GitHub Actions).
+on:
+  push:
+    branches: [main]
+    paths: ["README.md", "CHANGELOG.md", "SECURITY.md", "CONTRIBUTING.md", "docs/**", "mkdocs.yml", "scripts/build_docs.py"]
+  pull_request:
+    paths: ["README.md", "CHANGELOG.md", "SECURITY.md", "CONTRIBUTING.md", "docs/**", "mkdocs.yml", "scripts/build_docs.py"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - run: pip install -r docs/requirements.txt
+      - name: Assemble pages from the repository files
+        run: python -m scripts.build_docs
+      - name: Build the site (warnings are errors)
+        run: mkdocs build --strict
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/site
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && vars.PAGES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -39,6 +39,14 @@ diagnosis can be accepted (documented blind spot); the fix is limited to the fai
 repository are run by the service; Sentry, Alertmanager, GitHub PR creation and Langfuse were exercised through
 fakes, not against live services. See [Known limitations](#known-limitations).
 
+## Documentation site and releases
+
+The README, runbook, ADRs and changelog are also published as a searchable site (MkDocs Material), assembled from
+these same files by `python -m scripts.build_docs` and built by the `Docs` workflow (warnings are errors). To turn
+the site on: *Settings -> Pages -> Source: GitHub Actions*, then add the repository variable `PAGES_ENABLED=true`.
+Pushing a tag such as `v1.2.0` runs the `Release` workflow, which checks the tag against `pyproject.toml` and
+publishes a GitHub Release using that version's section of `CHANGELOG.md` as its notes.
+
 ## Contents
 
 - [Features](#features) · [Architecture](#architecture) · [Workflow and statuses](#workflow-and-statuses)
@@ -690,6 +698,10 @@ workflow has run green on GitHub since. Contributor workflow: [CONTRIBUTING.md](
 [SECURITY.md](SECURITY.md).
 
 ## Demo
+
+![Terminal recording of the demo (scripted mock model)](docs/images/demo.svg)
+
+*Recording of the mock run (regenerate with `python -m scripts.render_demo_svg`).*
 
 ```bash
 python -m scripts.demo          # scripted (MOCK) model reply

@@ -1,0 +1,48 @@
+site_name: OpsPulse AI
+site_description: Evidence-grounded root-cause analysis for production incidents, with a deterministic quality gate and human-approved remediation.
+site_url: https://codcreater1.github.io/OpsPulse-AI-Autonomous-Incident-Response-RCA-Agent/
+repo_url: https://github.com/codcreater1/OpsPulse-AI-Autonomous-Incident-Response-RCA-Agent
+repo_name: codcreater1/OpsPulse-AI
+docs_dir: build/site-src # assembled by scripts/build_docs.py from README, CHANGELOG, runbook and ADRs
+site_dir: build/site
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle: { icon: material/weather-night, name: Switch to dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle: { icon: material/weather-sunny, name: Switch to light mode }
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - toc.follow
+
+nav:
+  - Overview: index.md
+  - Operations:
+      - Runbook: runbook.md
+      - Security policy: security.md
+  - Architecture decisions:
+      - "0001 Deterministic quality gate": adr/0001-deterministic-quality-gate.md
+      - "0002 Side effects outside the graph": adr/0002-side-effects-outside-the-graph.md
+      - "0003 Lexical retrieval before embeddings": adr/0003-lexical-retrieval-before-embeddings.md
+  - Project:
+      - Changelog: changelog.md
+      - Contributing: contributing.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
