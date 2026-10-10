@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
+from itertools import pairwise
 from typing import Any
 
 from src.agent.patching import path_matches
@@ -32,6 +33,39 @@ def _provider_failed(r: Result) -> bool:
 
 def _abstained(r: Result) -> bool:
     return r["declared_insufficient"] or r["predicted_category"] == "unknown"
+
+
+def _correct(r: Result) -> bool:
+    """Outcome used for calibration: a conclusive case diagnosed with the labelled category."""
+    return not r["expected"]["inconclusive"] and r["predicted_category"] == r["expected"]["root_cause_category"]
+
+
+def _unsupported(r: Result) -> bool:
+    """The analysis lacked sufficient support: an inconclusive-labelled case, or an unverifiable quote."""
+    return r["expected"]["inconclusive"] or r["grounded_quotes"] < r["observed_quotes"]
+
+
+def calibration(
+    results: list[Result], key: str, bins: tuple[float, ...] = (0.0, 0.5, 0.7, 0.85, 1.0001)
+) -> dict[str, Any]:
+    """Brier score and per-bin accuracy of a 0..1 score against `_correct`. Small samples: indicative only."""
+    pairs = [(float(r[key]), _correct(r)) for r in results if isinstance(r.get(key), (int, float))]
+    if not pairs:
+        return {"samples": 0, "brier": None, "bins": []}
+    brier = sum((p - (1.0 if y else 0.0)) ** 2 for p, y in pairs) / len(pairs)
+    table = []
+    for low, high in pairwise(bins):
+        members = [(p, y) for p, y in pairs if low <= p < high]
+        if members:
+            table.append(
+                {
+                    "range": f"{low:.2f}-{min(high, 1.0):.2f}",
+                    "n": len(members),
+                    "mean_score": round(sum(p for p, _ in members) / len(members), 3),
+                    "accuracy": round(sum(1 for _, y in members if y) / len(members), 3),
+                }
+            )
+    return {"samples": len(pairs), "brier": round(brier, 4), "bins": table}
 
 
 def _percentile(values: list[int], q: float) -> int | None:
@@ -125,6 +159,12 @@ def compute_metrics(
             len(with_files),
             "cases whose affected_files contain a labelled relevant file / cases with labelled files",
         ),
+        "unsupported_acceptance_rate": _ratio(
+            count([r for r in evaluated if _unsupported(r)], lambda r: r["gate_passed"]),
+            len([r for r in evaluated if _unsupported(r)]),
+            "unsupported analyses (inconclusive-labelled or with an unverifiable quote) the gate accepted / "
+            "unsupported analyses",
+        ),
         "workflow_failure_rate": _ratio(
             count(results, lambda r: r["workflow_status"] == "failed"),
             len(results),
@@ -146,4 +186,8 @@ def compute_metrics(
             "attempts_with_usage": len(tokens_in),
         },
         "estimated_cost_usd": cost,
+        "calibration": {
+            "model_confidence": calibration(evaluated, "model_confidence"),
+            "quality_score": calibration(evaluated, "quality_score"),
+        },
     }

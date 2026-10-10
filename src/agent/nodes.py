@@ -249,6 +249,16 @@ def evaluate_analysis(state: IncidentState) -> Update:
     else:
         status, reason = "running", "retrying with evaluator feedback"
     analysis["evaluation"] = {**result.as_dict(), "attempt": state["iterations"], "decision": reason}
+    # Per-attempt trace of the gate's verdict (names of failed checks only, no content) for review and analysis.
+    attempts = list(state["attempts"])
+    if attempts:
+        attempts[-1] = {
+            **attempts[-1],
+            "gate_score": result.score,
+            "gate_passed": result.passed,
+            "failed_checks": [name for name, check in result.checks.items() if check.fraction < 1.0],
+            "decision": reason,
+        }
     logger.info(
         "evaluation attempt %d: score=%.4f passed=%s -> %s", state["iterations"], result.score, result.passed, status
     )
@@ -259,6 +269,7 @@ def evaluate_analysis(state: IncidentState) -> Update:
         "root_cause_analysis": analysis,
         "workflow_status": status,
         "error_category": category.value if category else None,
+        "attempts": attempts,
     }
 
 

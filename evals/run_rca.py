@@ -30,6 +30,7 @@ REPORTS = pathlib.Path(__file__).with_name("reports")
 DATASET_FILES = {
     "tuning": DATASETS / "rca_cases.json",  # used while developing prompts and the gate
     "holdout": DATASETS / "rca_holdout.json",  # never used for tuning
+    "adversarial": DATASETS / "rca_adversarial.json",  # tries to provoke unsupported conclusions
 }
 
 
@@ -100,7 +101,8 @@ def run(
         "results": results,
     }
     out_dir.mkdir(parents=True, exist_ok=True)
-    stem = out_dir / f"rca-{dataset_name}-{mode}-{started.strftime('%Y%m%dT%H%M%SZ')}"
+    model_tag = "mock" if mode == "mock" else settings.model_name.replace("/", "_")
+    stem = out_dir / f"rca-{dataset_name}-{mode}-{model_tag}-{started.strftime('%Y%m%dT%H%M%SZ')}"
     stem.with_suffix(".json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     stem.with_suffix(".md").write_text(_summary(report), encoding="utf-8")
     report["paths"] = [str(stem.with_suffix(".json")), str(stem.with_suffix(".md"))]

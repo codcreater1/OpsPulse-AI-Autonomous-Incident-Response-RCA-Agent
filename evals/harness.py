@@ -92,7 +92,7 @@ def build_scripted_reply(case: EvalCase, spec: dict[str, Any]) -> str:
         return spec["raw"]
     frame = get_trigger_frame(case.stack_trace)
     target = normalize_path(frame.path) if frame else None
-    trigger = f"{target}:{frame.line} -> {frame.function}()" if frame else "unknown"
+    trigger = spec.get("trigger") or (f"{target}:{frame.line} -> {frame.function}()" if frame else "unknown")
     evidence = []
     if spec.get("quote"):
         evidence.append(
@@ -113,6 +113,8 @@ def build_scripted_reply(case: EvalCase, spec: dict[str, Any]) -> str:
     diff = (
         _diff(target, case.files[target], fix, spec.get("corrupt_diff", False)) if fix and target in case.files else ""
     )
+    if diff and spec.get("retarget"):  # adversarial: same hunks, but the headers claim another file
+        diff = diff.replace(f"a/{target}", f"a/{spec['retarget']}").replace(f"b/{target}", f"b/{spec['retarget']}")
     sufficient = spec.get("sufficient", True)
     return json.dumps(
         {
@@ -215,6 +217,7 @@ def run_case(case: EvalCase, model_factory: ModelFactory | None) -> dict[str, An
         "quality_score": final["quality_score"],
         "predicted_category": analysis.get("root_cause_category"),
         "declared_insufficient": control.get("evidence_sufficient") is False,
+        "model_confidence": control.get("self_assessed_confidence"),
         "observed_quotes": len(evidence),
         "grounded_quotes": sum(1 for e in evidence if e is None),
         "affected_files": sorted(files),

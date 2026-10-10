@@ -47,12 +47,13 @@ jobs:
       - name: Unit tests with coverage
         run: pytest --cov=src --cov=evals --cov-report=term-missing:skip-covered --cov-report=xml
 
-      - name: Offline (mock) evaluation with regression thresholds
-        run: >
-          python -m evals.run_rca --mode mock
-          --min structured_output_validity=0.9
-          --min evidence_grounding_accuracy=0.95
-          --min inconclusive_not_accepted_rate=1.0
+      - name: Offline evaluation, regression gate against committed baselines
+        # Scripted replies are deterministic, so any drop in a quality metric is a real behaviour change.
+        run: |
+          for dataset in tuning holdout adversarial; do
+            python -m evals.run_rca --mode mock --dataset "$dataset" --out /tmp/eval
+            python -m evals.compare_reports "evals/baselines/rca-$dataset-mock.json" /tmp/eval/rca-$dataset-mock-*.json               --fail-on-regression
+          done
 
       - name: Retrieval evaluation (fails on any cross-repository leak)
         run: python -m evals.run_retrieval
