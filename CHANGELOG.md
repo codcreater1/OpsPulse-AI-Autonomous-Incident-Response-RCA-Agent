@@ -16,7 +16,8 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ### Fixed
 - Sentry webhook: a correctly signed payload whose `stacktrace` was a list raised `AttributeError` (HTTP 500);
-  found by a property-based test. Wrongly typed fields at any known position are now a payload problem or ignored.
+  and one whose `exception.values` was not a list raised `TypeError`; both found by property-based tests.
+  Wrongly typed fields at any known position are now a payload problem or ignored.
 - Assistant: quoted text was verified against the prompt's JSON-escaped rendering, so correct quotes containing
   `"` were flagged as not in the record; verification now uses the record's decoded strings.
 
@@ -26,7 +27,8 @@ All notable changes are listed here. Versions of behaviour-critical components a
   pending quota.
 - Assistant guard: an answer that recommends approving or merging is replaced and flagged (`flags:
   approval_advice`) - a checked property instead of a prompt instruction.
-- Property-based tests (hypothesis): diff round-trip, parsers never raise unexpected errors, prompt tags cannot
+- Property-based tests (hypothesis; deterministic in CI, a weekly exploratory job runs 2000 random examples):
+  diff round-trip, parsers never raise unexpected errors, prompt tags cannot
   survive neutralisation, answers stay bounded, guidance is total.
 - `Security` workflow (pip-audit, CodeQL for Python and JavaScript); CI coverage floor (84%).
 - Third live session notes: `fix_location` fired live for the first time; a held-out false acceptance

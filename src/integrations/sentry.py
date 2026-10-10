@@ -88,7 +88,8 @@ def to_incident(payload: dict[str, Any]) -> SentryIncident:
     if not event_id:
         raise SentryPayloadError("event has no event_id")
     exception: dict[str, Any] = event["exception"] if isinstance(event.get("exception"), dict) else {}
-    values = [v for v in exception.get("values") or [] if isinstance(v, dict)]
+    raw_values = exception.get("values")
+    values = [v for v in raw_values if isinstance(v, dict)] if isinstance(raw_values, list) else []
     last: dict[str, Any] = values[-1] if values else {}
     exc_type = str(last.get("type") or "").strip()
     exc_value = str(last.get("value") or "").strip()

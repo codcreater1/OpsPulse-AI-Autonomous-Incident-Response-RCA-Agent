@@ -7,6 +7,7 @@ Every parser here receives untrusted text (log lines, webhook payloads, model ou
 import contextlib
 import difflib
 import json
+import os
 import re
 
 from hypothesis import HealthCheck, given, settings
@@ -20,7 +21,15 @@ from src.integrations.sentry import SentryPayloadError, to_incident
 from src.services.ask_service import MAX_ANSWER_CHARS, parse_answer
 from src.services.guidance import build_guidance
 
-PROFILE = settings(max_examples=150, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+# Reproducible by default (derandomised: a red build is always a real, repeatable bug). The weekly Security workflow
+# sets HYPOTHESIS_EXPLORE=1 and many more examples to hunt for new counterexamples with random seeds.
+_EXPLORE = os.environ.get("HYPOTHESIS_EXPLORE") == "1"
+PROFILE = settings(
+    max_examples=int(os.environ.get("HYPOTHESIS_EXAMPLES", "150")),
+    derandomize=not _EXPLORE,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
+)
 
 # JSON-like values for webhook payloads
 JSON_LEAF = st.none() | st.booleans() | st.integers(-5, 10**6) | st.floats(allow_nan=False) | st.text(max_size=30)
@@ -191,3 +200,9 @@ def test_sentry_stacktrace_given_as_a_list_is_a_payload_problem_not_a_server_err
     payload = {"data": {"event": {"event_id": "1", "title": "t", "exception": {"values": [{"stacktrace": [1]}]}}}}
     incident = to_incident(payload)  # used to raise AttributeError -> HTTP 500 on a correctly signed request
     assert incident.stack_trace == "" and incident.error_message == "t"
+
+
+def test_sentry_exception_values_of_the_wrong_type_are_ignored():
+    for values in (True, 5, "text", {"a": 1}, None, [None, 3, "x"]):
+        payload = {"data": {"event": {"event_id": "1", "title": "t", "exception": {"values": values}}}}
+        assert to_incident(payload).error_message == "t"

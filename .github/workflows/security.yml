@@ -25,6 +25,23 @@ jobs:
       - name: Audit pinned runtime requirements
         run: pip-audit -r requirements.txt --progress-spinner off
 
+  properties:
+    name: Property-based tests (exploratory, random seeds)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Hunt for new counterexamples
+        env:
+          HYPOTHESIS_EXPLORE: "1"
+          HYPOTHESIS_EXAMPLES: "2000"
+        run: pytest -q tests/unit/test_properties.py
+
   codeql:
     name: CodeQL (Python and JavaScript)
     runs-on: ubuntu-latest
