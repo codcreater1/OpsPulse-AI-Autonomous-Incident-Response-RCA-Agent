@@ -15,7 +15,7 @@ cleanup() {
   code=$?
   if [ "${code}" -ne 0 ] && [ -n "${GITHUB_ACTIONS:-}" ]; then
     # Surface the cause as an annotation (readable without access to the raw job log).
-    report="$( { docker compose ps -a; docker compose logs --no-color --tail=25; } 2>&1 | tail -c 6000 )"
+    report="$( { docker compose ps -a; docker compose logs --no-color --tail=40 worker; } 2>&1 | tail -c 6000 )"
     report="${report//'%'/'%25'}"; report="${report//$'\r'/}"; report="${report//$'\n'/'%0A'}"
     echo "::error title=compose smoke test failed::${report}"
   fi
