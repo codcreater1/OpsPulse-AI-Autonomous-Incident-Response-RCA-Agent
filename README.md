@@ -545,7 +545,9 @@ translation, listing/pagination, Prometheus labels, and the console's CSP and ab
   regression thresholds, retrieval evaluation (fails on any cross-repository leak) and the sandboxed demo;
 - **postgres** - Alembic upgrade/downgrade/upgrade round trip, `alembic check` (models == migrated schema) and
   the unit tests against a PostgreSQL 16 service container;
-- **docker** - validates the Compose file and the Prometheus alert rules, and builds the image.
+- **docker** - validates the Compose file and the Prometheus alert rules, builds the image, and runs an
+  end-to-end smoke test of the Compose stack (`scripts/compose_smoke.sh`): an incident submitted to the API
+  is processed by the separate worker container against PostgreSQL.
 
 The first CI run on GitHub caught a dependency that a stale local virtualenv had hidden (see CHANGELOG); the
 workflow has run green on GitHub since. Contributor workflow: [CONTRIBUTING.md](CONTRIBUTING.md); security:
@@ -586,8 +588,8 @@ pipeline, gate and sandboxed verification - **not** the model's ability. PR crea
 ## Known limitations
 
 - **Untested against live services:** Groq, GitHub branch/PR creation, Neon and Langfuse were exercised only
-  through fakes. PostgreSQL is covered by the CI job (service container), and the Docker image builds in CI but
-  has not been run end to end with Compose.
+  through fakes (Groq has been exercised live in the evaluations). PostgreSQL and the Compose stack (api +
+  worker + db) are exercised in CI.
 - The queue lives in the `incidents` table and is polled (default every second); it is meant for tens of
   incidents per minute, not for high-throughput streaming. An interrupted analysis restarts from the beginning
   (no mid-graph checkpoint), so a crash costs the LLM calls already made.

@@ -135,9 +135,9 @@ jobs:
         run: pytest -q
 
   docker:
-    name: Docker image builds
+    name: Docker image and Compose stack
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - name: Compose file is valid
@@ -150,3 +150,6 @@ jobs:
 
       - name: Build
         run: docker build -t opspulse-ai:ci .
+
+      - name: End-to-end smoke test (api + worker + PostgreSQL via Compose)
+        run: bash scripts/compose_smoke.sh
