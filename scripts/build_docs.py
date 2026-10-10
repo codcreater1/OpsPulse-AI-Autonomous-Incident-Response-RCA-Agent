@@ -28,6 +28,7 @@ PAGES = {  # repo path -> site path
     "SECURITY.md": "security.md",
     "CONTRIBUTING.md": "contributing.md",
     "docs/RUNBOOK.md": "runbook.md",
+    "docs/API.md": "api.md",
 }
 
 

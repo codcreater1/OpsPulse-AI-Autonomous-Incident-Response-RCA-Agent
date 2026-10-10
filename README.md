@@ -386,6 +386,24 @@ on the provider's daily token limit, so **there is no live evidence yet that cal
 only the mock comparison with scripted replies (grounded quotes 8/8 and 1 attempt per case with callers,
 5/8 and 3 attempts without).
 
+**Held-out set, second session** (`prompt v5` + `quality-gate-v6`, `gpt-oss-120b`; reports
+[1](evals/results/rca-holdout-live-2026-10-10-prompt-v5-gate-v6-missing-package.md),
+[2](evals/results/rca-holdout-live-2026-10-10-prompt-v5-gate-v6-partial.md)): three more cases evaluated before the
+daily token quota ran out again; two remain (`ho-pool-timeout`, and `ho-drift-attribute` ended on the quota after
+its first attempt). Different prompt and gate versions from the 7 cases above, so the two groups are reported
+separately, not merged:
+
+| Case | Expected | Result |
+|---|---|---|
+| `ho-missing-package` | import_error | accepted, correct, 1 attempt |
+| `ho-gateway-timeout` | inconclusive | model reported insufficient evidence, not accepted (correct) |
+| `ho-off-by-one` | logic_error | right category, but **the patch never applied** in 3 attempts -> `needs_review` |
+| `ho-drift-attribute` | inconclusive | first attempt flagged by `trace_code_consistency` (deploy drift), then quota |
+
+So, on held-out cases: no false acceptance so far, and one honest weakness - for `ho-off-by-one` the diagnosis was
+right while every proposed diff failed `diff_applies`, i.e. the agent did not produce a usable patch. The
+`rca-callers-v2` set could not be run live (quota), so `fix_location` still has no live evidence.
+
 What the first live run showed, and what changed:
 
 - **The model did not fabricate evidence**: every "observed" quote was verbatim in the retrieved data (50/50).
@@ -637,7 +655,8 @@ For Neon, remove the `db` service and set `DATABASE_URL` in `.env`.
 
 `GET /healthz` (liveness, public) · `GET /readyz` (database check, public, no details) · `GET /metrics`
 (Prometheus; public unless `METRICS_ENABLED=false`) · `GET /incidents?status=awaiting_approval&limit=20`
-(newest first, keyset `cursor` pagination) · interactive docs at `/docs`.
+(newest first, keyset `cursor` pagination) · interactive docs at `/docs` · a generated
+[API reference](docs/API.md) (kept in sync with the code by a test).
 
 ```bash
 curl -X POST "http://localhost:8000/webhook/incident?wait=true" \

@@ -26,6 +26,7 @@ theme:
 nav:
   - Overview: index.md
   - Operations:
+      - API reference: api.md
       - Runbook: runbook.md
       - Security policy: security.md
   - Architecture decisions:

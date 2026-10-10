@@ -5,6 +5,12 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Added
+- Held-out evaluation, second live session (prompt v5, gate v6): 3 more cases; no false acceptance, one case
+  with a correct diagnosis but a patch that never applied. Reports in `evals/results/`.
+- `docs/API.md`: API reference generated from the OpenAPI schema (`python -m scripts.export_api_docs`);
+  a unit test fails when it is out of date; included in the documentation site.
+
 ### Changed
 - Review console redesign: deep links and back/forward navigation, search, auto-refresh, keyboard shortcuts,
   gate-check meters (failures first), attempt timeline, patch view with line numbers, copy/download, confirmation
