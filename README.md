@@ -538,8 +538,9 @@ Alembic migrations vs. models, Langfuse enabled/disabled/broken, log redaction, 
 the four-eyes rule, rate limiting, queue claims/lease expiry/worker resilience, Sentry signatures and payload
 translation, listing/pagination, Prometheus labels, and the console's CSP and absence of unsafe DOM sinks.
 
-`.github/workflows/ci.yml` (no secrets, `contents: read`) has three jobs:
+`.github/workflows/ci.yml` (no secrets, `contents: read`) has four jobs:
 
+- **python-versions** - the unit tests on Python 3.12 and 3.13 (the image uses 3.11);
 - **quality** - ruff, format check, mypy, import smoke test, unit tests with coverage, mock evaluation with
   regression thresholds, retrieval evaluation (fails on any cross-repository leak) and the sandboxed demo;
 - **postgres** - Alembic upgrade/downgrade/upgrade round trip, `alembic check` (models == migrated schema) and

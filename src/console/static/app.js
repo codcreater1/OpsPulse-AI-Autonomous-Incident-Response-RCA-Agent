@@ -138,6 +138,7 @@ function renderDetail(incident) {
   $("d-category").textContent = analysis.root_cause_category || "-";
   $("d-score").textContent = `${Number(incident.quality_score).toFixed(2)} after ${incident.iterations} attempt(s)`;
   $("d-submitter").textContent = incident.submitted_by || "-";
+  $("d-usage").textContent = usageSummary(analysis.attempts || []);
   const reason = [incident.status_reason, incident.error_category && `(${incident.error_category})`].filter(Boolean);
   $("d-reason").textContent = reason.join(" ");
   $("d-root").textContent = root.technical_explanation || "No analysis available.";
@@ -172,6 +173,14 @@ function renderDetail(incident) {
   const pending = incident.pending_approval;
   $("approval").hidden = !pending;
   if (pending) $("a-sha").textContent = pending.patch_sha256;
+}
+
+function usageSummary(attempts) {
+  if (!attempts.length) return "-";
+  const sum = (key) => attempts.reduce((total, a) => total + (Number(a[key]) || 0), 0);
+  const tokens = sum("input_tokens") + sum("output_tokens");
+  const seconds = sum("latency_ms") / 1000;
+  return `${attempts.length} call(s), ${tokens.toLocaleString()} tokens, ${seconds.toFixed(1)} s`;
 }
 
 function fillList(id, values) {

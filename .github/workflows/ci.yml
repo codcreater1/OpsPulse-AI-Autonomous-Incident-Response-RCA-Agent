@@ -70,6 +70,28 @@ jobs:
             evals/reports/
           if-no-files-found: ignore
 
+  python-versions:
+    name: Unit tests on Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]  # 3.11 (the image's version) runs in the quality job
+    env:
+      DATABASE_URL: sqlite://
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Unit tests
+        run: pytest -q
+
   postgres:
     name: Migrations and tests on PostgreSQL 16
     runs-on: ubuntu-latest
