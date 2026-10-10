@@ -167,7 +167,49 @@ def _squash(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-_QUOTED = re.compile(r"`([^`\n]{6,200})`")
+_BACKTICK_RUN = re.compile(r"`+")
+
+
+def _pair_runs(text: str, runs: list[tuple[int, int]], first: int) -> list[str]:
+    """Raw text between backtick runs of equal width, pairing from run index `first` (CommonMark rules)."""
+    raw: list[str] = []
+    i = first
+    while i < len(runs):
+        start, end = runs[i]
+        width = end - start
+        j = i + 1
+        while j < len(runs) and runs[j][1] - runs[j][0] != width:
+            j += 1
+        if j < len(runs):
+            raw.append(text[end : runs[j][0]])
+            i = j + 1
+        else:
+            i += 1
+    return raw
+
+
+def code_spans(text: str) -> list[str]:
+    """Inline code spans: a run of N backticks closes at the next run of exactly N.
+
+    A naive "`...`" pattern mis-pairs as soon as the text holds a double-backtick span or a stray backtick, and then
+    treats the prose *between* two spans as a quote (seen with a live model). Two defences: runs are paired by
+    width, and because a single stray backtick shifts every later pair, both pairings (from the first and from the
+    second run) are tried and the one with fewer prose-like spans - text that starts and ends with a space, which
+    real code spans almost never do - wins. Only single-line spans of 6-200 characters are returned.
+    """
+    runs = [(m.start(), m.end()) for m in _BACKTICK_RUN.finditer(text)]
+
+    def prose_like(raw: str) -> bool:
+        return len(raw) > 1 and raw[0].isspace() and raw[-1].isspace()
+
+    best: list[str] = []
+    best_score: int | None = None
+    for first in (0, 1):
+        raw = _pair_runs(text, runs, first)
+        score = sum(prose_like(r) for r in raw)
+        if best_score is None or score < best_score:
+            best, best_score = raw, score
+    return [r.strip() for r in best if not prose_like(r) and 6 <= len(r.strip()) <= 200 and "\n" not in r.strip()]
 
 
 def record_text(value: Any, limit: int = 400_000) -> str:
@@ -191,7 +233,7 @@ def unverified_quotes(answer: str, sections: dict[str, str], extra_text: str = "
     """Backtick-quoted spans of the answer that do not occur verbatim in the record."""
     haystack = _squash("\n".join([*sections.values(), extra_text]))
     missing = []
-    for span in _QUOTED.findall(answer):
+    for span in code_spans(answer):
         if _squash(span) not in haystack:
             missing.append(span[:80])
     return list(dict.fromkeys(missing))[:3]
@@ -328,6 +370,11 @@ def rules_answer(intent: str, guide: dict[str, Any], incident: dict[str, Any]) -
                 f"lines{where}. It was not run. The gate checks that it applies to the retrieved source and stays "
                 "small and local; it does not prove the fix is correct - run the project's tests before relying on it."
             )
+            if facts.get("pattern") == "guard_or_default":
+                answer += (
+                    " It only adds a guard or default value, which can hide an upstream cause: check where the "
+                    "value comes from."
+                )
         follow_ups = ["Why did the gate accept or reject this?", "What should I check first?"]
     else:  # stats
         cited.append("attempts")

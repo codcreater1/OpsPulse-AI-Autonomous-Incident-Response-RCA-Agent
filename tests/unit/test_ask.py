@@ -215,3 +215,22 @@ def test_long_answers_are_truncated_and_quote_check_is_whitespace_tolerant():
     out = parse_answer('{"answer": "' + "a" * 5000 + '", "answerable": true, "cited_sections": ["evidence"]}', sections)
     assert len(out["answer"]) == MAX_ANSWER_CHARS and out["grounded"] is True
     assert unverified_quotes("see `result  +=\n item.price` and `missing code`", sections) == ["missing code"]
+
+
+def test_code_spans_follow_markdown_pairing_not_a_naive_backtick_pattern():
+    from src.services.ask_service import code_spans
+
+    text = "It reads `result += item.price` and ``a `tick` inside`` before `broken span"
+    assert code_spans(text) == ["result += item.price", "a `tick` inside"]
+    assert code_spans("short `ab` span and ```fenced\nblock``` here") == []
+
+
+def test_a_stray_backtick_does_not_turn_prose_into_a_quote():
+    from src.services.ask_service import code_spans, unverified_quotes
+
+    stray = "Odd ` backtick, then `real_code(x)` and later `other_code(y)` end."
+    assert code_spans(stray) == ["real_code(x)", "other_code(y)"]
+    # the live-model false positive: prose between two spans must never be checked as a quote
+    live = 'The cause is `profile` being None, based on the observed line `name = profile["name"]` and the trace.'
+    assert code_spans(live) == ['name = profile["name"]'] or "being None" not in " ".join(code_spans(live))
+    assert unverified_quotes(live, {"evidence": 'name = profile["name"]'}) == []

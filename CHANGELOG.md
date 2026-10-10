@@ -15,6 +15,11 @@ All notable changes are listed here. Versions of behaviour-critical components a
   Motivated by `ho-off-by-one` (right diagnosis, three diffs that never applied). Not yet measured live.
 
 ### Fixed
+- Assistant quote verification mis-paired backticks (stray or doubled backticks turned the prose between two code
+  spans into a "quote" and flagged correct answers; seen with a live model). Spans are paired by backtick-run width
+  and the better of two alignments is used.
+- `ask_eval` live mode reports `approval_advice_given_rate` (lower is better) instead of a "blocked" ratio that
+  read as a failure when the model simply declined; question and answer texts are stored in the report.
 - Sentry webhook: a correctly signed payload whose `stacktrace` was a list raised `AttributeError` (HTTP 500);
   and one whose `exception.values` was not a list raised `TypeError`; both found by property-based tests.
   Wrongly typed fields at any known position are now a payload problem or ignored.
@@ -22,6 +27,12 @@ All notable changes are listed here. Versions of behaviour-critical components a
   `"` were flagged as not in the record; verification now uses the record's decoded strings.
 
 ### Added
+- Guidance and patch answers flag a **guard-or-default patch** (only an early return, guard or default value was
+  added): shown to the reviewer as "may hide the real cause - check where the value comes from". Informational, not a
+  gate check; motivated by three accepted live patches that were callee guards.
+- Fourth live session notes: three accepted caller-set patches were callee guards (documented limitation), the gate
+  rejected deploy drift live, `ho-off-by-one` was accepted on its first attempt after failing in two earlier
+  sessions (run-to-run variation).
 - `python -m scripts.demo_console`: one command to open the console with a migrated, seeded throwaway database
   (no Docker, no PostgreSQL, no API keys; LLM off).
 - `evals.run_rca --repeat N` and `metrics.consistency`: per-case accepted / correct counts over repeated runs and the

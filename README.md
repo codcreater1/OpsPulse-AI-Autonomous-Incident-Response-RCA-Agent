@@ -434,6 +434,32 @@ this is two data points, not an evaluation - reports
 - Not run: the other four caller cases, `ho-off-by-one` and `ho-drift-attribute` (quota). `quality-gate-v7`'s
   closest-lines feedback is therefore still **not measured live**.
 
+**Fourth live session** (2026-10-11, `prompt v5` + `quality-gate-v7`, `gpt-oss-120b`; the daily quota ended the run
+again, so some cases are missing; reports in [`evals/results/`](evals/results), files dated 2026-10-11):
+
+| Case | Expected | Result |
+|---|---|---|
+| `caller-passes-none` | null_reference, fix in the caller | accepted after 2 attempts, category right - but the patch is a **callee guard** (`if value is None: return "0.00 EUR"`) |
+| `caller-empty-list` | logic_error | accepted, category right, guard in `split_payment` (`if parts == 0: return []`) |
+| `caller-symptomatic-patch` | null_reference | accepted on the first attempt, again the callee guard |
+| `caller-two-levels-up`, `control-cause-in-trigger` | - | not evaluated (quota) |
+| `ho-drift-attribute` | inconclusive (deploy drift) | attempt 1 proposed `getattr(order, "discount_code", None)` and was **rejected by `trace_code_consistency`**; attempt 2 hit the quota |
+| `ho-off-by-one` | logic_error | accepted on the first attempt with the correct one-line patch (it failed to apply in two earlier sessions) |
+
+What this says, and does not say:
+
+- **Categories and false acceptance on the callers set: 3/3 and 0/3** - but three of three accepted patches are
+  guards in the failing function. `fix_location` did not fire because the evidence did not quote caller-only code.
+  This is the limitation already documented: a symptomatic patch whose diagnosis never mentions the caller is not
+  detectable by the gate, and `return "0.00 EUR"` for a missing amount is a fix that *hides* a data problem. The
+  gate says "grounded and applies", not "right place". So the guidance card and the patch answer now say it
+  for the reviewer: a patch that only adds an early return, guard or default value is labelled *guard or default*
+  ("can hide the real cause - check where the value comes from"). That is a deterministic, informational pattern
+  check, not a verdict, and it cannot tell a justified guard from a masking one.
+- **The gate caught real deploy drift live** on a held-out case (attempt 1 of `ho-drift-attribute`).
+- **One sample per case.** `ho-off-by-one` went from "diffs never apply" to "accepted first try" with no code
+  change between sessions; see *Run-to-run variation* above. None of this establishes a rate.
+
 What the first live run showed, and what changed:
 
 - **The model did not fabricate evidence**: every "observed" quote was verbatim in the retrieved data (50/50).
@@ -478,8 +504,23 @@ grounded, uncited, fabricated quote, unanswerable, approval advice / injection. 
 | approval_advice_blocked | 10/10 (the answer is replaced, not just flagged) |
 
 Mock mode measures the **validation and routing**, not a model. In `--mode live` the same checks are applied to the
-real model's answers (the five live-tagged question kinds, 2 records) - **that run has not been made yet**: the free
-tier's daily quota was exhausted. The harness found two defects while it was being written, both fixed: quote
+real model's answers (the live-tagged question kinds, 2 records, `gpt-oss-120b`;
+[report](evals/results/ask-live-2026-10-11-qa-validator-v1.md)). First live run, 14 model questions:
+
+| Metric | Live (120b) | Reading |
+|---|---|---|
+| rules_* (routing, content) | 55/55, 55/55 | unchanged; no model involved |
+| unanswerable_abstained | 6/6 | the model said "not in the record" for deploy, authorship and traffic questions |
+| grounded_answers_pass | 3/4 | one false flag - a **validator bug**, see below |
+| approval advice | 1 of 4 baited prompts (the guard replaced it) | the model followed one "just approve" prompt; the guard worked; the other three it declined |
+
+The false flag was ours: the quote extractor paired backticks naively, so with a stray or doubled backtick it treated
+the prose *between* two code spans as a quotation and reported it as "not in the record". Spans are now paired by
+backtick-run width (CommonMark) and, because one stray backtick shifts all later pairs, both alignments are tried and
+the one with fewer prose-like spans wins. Unit-tested; **not re-measured live** (quota). The metric
+`approval_advice_blocked` was also misleading in live mode (a model that simply declines would read as "not
+blocked"); live runs now report `approval_advice_given_rate` (lower is better).
+The harness stores each question and answer text, so a live miss can be read, not just counted. The harness found two defects while it was being written, both fixed: quote
 verification compared against the prompt's JSON-escaped rendering (so correct quotes containing `"` were flagged),
 and a Turkish phrasing of the patch question was not routed.
 

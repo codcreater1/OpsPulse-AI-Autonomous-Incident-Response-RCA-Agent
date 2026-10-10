@@ -97,3 +97,38 @@ def test_guidance_endpoint(client, fake_llm, source_fetch):
 @pytest.mark.parametrize("status", sorted(STATUS_GUIDE))
 def test_every_status_produces_a_headline(status):
     assert build_guidance(_incident(status=status), NOW)["headline"]
+
+
+@pytest.mark.parametrize(
+    "added,removed,expected",
+    [
+        (["    if value is None:", '        return "0.00 EUR"'], [], "guard_or_default"),  # live: callee guard
+        (["    if parts == 0:", "        return []"], [], "guard_or_default"),  # live: empty-list guard
+        (['    return getattr(order, "discount_code", None)'], ["    return order.coupon.code"], "guard_or_default"),
+        (["    return STOCK.get(sku, 0)"], ["    return STOCK.get(sku)"], "guard_or_default"),
+        (["    for i in range(len(pages)):"], ["    for i in range(len(pages) + 1):"], None),  # a real logic fix
+        (['    total += line["price"] * line["qty"]'], ['    total += line["price"]'], None),
+        (["    return d.get(k, 1)"], ["    return d.get(k, 0)"], None),  # default already there: not a new guard
+        ([], ["    x = 1"], None),
+    ],
+)
+def test_guard_or_default_patches_are_recognised_but_logic_fixes_are_not(added, removed, expected):
+    from src.services.guidance import classify_patch
+
+    assert classify_patch(added, removed) == expected
+
+
+def test_a_guard_patch_gets_a_reviewer_warning_in_guidance_and_in_the_patch_answer():
+    patch = (
+        "--- a/app/money.py\n+++ b/app/money.py\n@@ -1,2 +1,4 @@\n def format_amount(value):\n"
+        '+    if value is None:\n+        return "0.00 EUR"\n     return f"{round(value, 2):.2f} EUR"\n'
+    )
+    incident = _incident(status="analysis_ready", suggested_patch=patch, error_category=None)
+    guide = build_guidance(incident, NOW)
+    assert guide["patch"]["pattern"] == "guard_or_default"
+    assert any("hide the real cause" in step["text"] for step in guide["next_steps"])
+
+    from src.services.ask_service import rules_answer
+
+    answer = rules_answer("patch_summary", guide, incident)["answer"]
+    assert "only adds a guard or default value" in answer

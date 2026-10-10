@@ -7,6 +7,7 @@ trace, patch) and from the operating rules in docs/RUNBOOK.md. It never claims a
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -260,6 +261,32 @@ def _parse_time(value: Any) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
+# A "guard or default" patch makes the failing line stop failing without saying why the value was bad. It can be
+# the right fix, but it is also the classic way to hide an upstream problem, so reviewers are told when they see one.
+_GUARD_LINE = re.compile(r"^\s*(if\b.*:|elif\b.*:|else\s*:|return\b.*|continue|pass|raise\b.*)\s*$")
+_DEFAULTING = re.compile(
+    r"\.get\([^()]*,[^()]*\)|getattr\([^()]*,[^()]*,[^()]*\)|\bor\s+(\[\]|\{\}|0|''|\"\"|None)\b|"
+    r"\bif\b.+\belse\b|\bor\s+(\[\]|\{\}|0|''|\"\")"
+)
+
+
+def classify_patch(added: list[str], removed: list[str]) -> str | None:
+    """`guard_or_default` when the patch only adds an early return / guard / default value, else None."""
+    code = [a for a in added if a.strip() and not a.strip().startswith("#")]
+    if not code:
+        return None
+    if not removed and all(_GUARD_LINE.match(a) for a in code) and any(a.lstrip().startswith("if") for a in code):
+        return "guard_or_default"
+    if (
+        removed
+        and len(code) <= 2
+        and any(_DEFAULTING.search(a) for a in code)
+        and not any(_DEFAULTING.search(r) for r in removed)
+    ):
+        return "guard_or_default"
+    return None
+
+
 def patch_facts(patch: str | None) -> dict[str, Any] | None:
     """Counts only - what the patch changes, derived without a model."""
     if not patch:
@@ -268,15 +295,16 @@ def patch_facts(patch: str | None) -> dict[str, Any] | None:
         parsed = parse_unified_diff(patch)
     except PatchError:
         return {"parsable": False}
-    added = sum(1 for h in parsed.hunks for op, _ in h.ops if op == "+")
-    removed = sum(1 for h in parsed.hunks for op, _ in h.ops if op == "-")
+    added_lines = [text for h in parsed.hunks for op, text in h.ops if op == "+"]
+    removed_lines = [text for h in parsed.hunks for op, text in h.ops if op == "-"]
     return {
         "parsable": True,
         "file": parsed.path,
         "hunks": len(parsed.hunks),
-        "added": added,
-        "removed": removed,
+        "added": len(added_lines),
+        "removed": len(removed_lines),
         "starts": [h.old_start for h in parsed.hunks if h.old_start],
+        "pattern": classify_patch(added_lines, removed_lines),
     }
 
 
@@ -351,6 +379,16 @@ def build_guidance(incident: dict[str, Any], now: datetime | None = None) -> dic
             "See the runbook section 'PR creation fails' (existing branch, stale patch, token scope).",
         )
 
+    patch = patch_facts(incident.get("suggested_patch"))
+    if patch and patch.get("pattern") == "guard_or_default":
+        add(
+            "check",
+            "reviewer",
+            "The patch only adds a guard or default value in the failing function. That can be right, but it can also "
+            "hide the real cause (a caller passing a bad value, or missing data upstream): check where the value "
+            "comes from before accepting it.",
+        )
+
     checks = failed_checks(analysis)
     blocking = [c for c in checks if c["blocking"]]
     if status == "needs_review" and blocking:
@@ -379,7 +417,6 @@ def build_guidance(incident: dict[str, Any], now: datetime | None = None) -> dic
             facts.append("the same check(s) failed in every attempt: " + ", ".join(sorted(common)))
     if incident.get("quality_score") is not None:
         facts.append(f"gate score {float(incident['quality_score']):.2f} (a rubric score, not a probability)")
-    patch = patch_facts(incident.get("suggested_patch"))
     if patch and patch.get("parsable"):
         facts.append(
             f"patch: {patch['file']}, +{patch['added']} -{patch['removed']} in {patch['hunks']} hunk(s), not run"

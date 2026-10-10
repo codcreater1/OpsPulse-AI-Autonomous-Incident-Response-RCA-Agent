@@ -1,0 +1,178 @@
+{
+  "mode": "live",
+  "started_at": "2026-10-10T22:09:58.091162+00:00",
+  "dataset_version": "rca-holdout-v1",
+  "run_metadata": {
+    "agent_version": "1.2.0-opspulse",
+    "prompt_version": "rca-prompt-v5",
+    "evaluator_version": "quality-gate-v7",
+    "retrieval_strategy": "lexical-v1",
+    "model": "openai/gpt-oss-120b",
+    "quality_threshold": 0.85,
+    "max_analysis_iterations": 3,
+    "max_output_tokens": 4096
+  },
+  "metrics": {
+    "cases": 1,
+    "cases_not_evaluated": [
+      "ho-drift-attribute"
+    ],
+    "structured_output_validity": {
+      "value": 1.0,
+      "numerator": 1,
+      "denominator": 1,
+      "definition": "LLM attempts whose reply validated against RCAOutput / LLM attempts (provider errors excluded)"
+    },
+    "category_accuracy": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "definition": "final category == labelled category / cases labelled conclusive"
+    },
+    "evidence_grounding_accuracy": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "definition": "'observed' quotes found verbatim in their cited source / all 'observed' quotes (final analyses)"
+    },
+    "unsupported_claim_rate": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "definition": "(unverifiable 'observed' quotes + affected files absent from trace/retrieved file) / (all quotes + all affected files)"
+    },
+    "abstention_recall": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "definition": "inconclusive-labelled cases where the model declared insufficient evidence or category 'unknown' / inconclusive-labelled cases"
+    },
+    "inconclusive_not_accepted_rate": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "definition": "inconclusive-labelled cases the quality gate did NOT accept / inconclusive-labelled cases"
+    },
+    "false_abstention_rate": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "definition": "conclusive-labelled cases where the model abstained / conclusive-labelled cases"
+    },
+    "gate_acceptance_rate": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "definition": "cases accepted by the quality gate / evaluated cases"
+    },
+    "false_acceptance_rate": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "definition": "accepted cases that are inconclusive-labelled or have the wrong category / accepted cases"
+    },
+    "relevant_file_hit_rate": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "definition": "cases whose affected_files contain a labelled relevant file / cases with labelled files"
+    },
+    "unsupported_acceptance_rate": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "definition": "unsupported analyses (inconclusive-labelled or with an unverifiable quote) the gate accepted / unsupported analyses"
+    },
+    "workflow_failure_rate": {
+      "value": 1.0,
+      "numerator": 1,
+      "denominator": 1,
+      "definition": "cases ending in workflow status 'failed' (e.g. provider errors) / cases"
+    },
+    "avg_attempts": 2.0,
+    "llm_latency_ms": {
+      "mean": 98421,
+      "p95": 98421,
+      "samples": 1
+    },
+    "case_wall_ms": {
+      "mean": 98945,
+      "p95": 98945
+    },
+    "tokens": {
+      "input": 2006,
+      "output": 1554,
+      "attempts_with_usage": 1
+    },
+    "estimated_cost_usd": null,
+    "calibration": {
+      "model_confidence": {
+        "samples": 0,
+        "brier": null,
+        "bins": []
+      },
+      "quality_score": {
+        "samples": 0,
+        "brier": null,
+        "bins": []
+      }
+    },
+    "consistency": null
+  },
+  "results": [
+    {
+      "case_id": "ho-drift-attribute",
+      "expected": {
+        "root_cause_category": "attribute_error",
+        "inconclusive": true,
+        "relevant_files": [
+          "app/orders.py"
+        ]
+      },
+      "workflow_status": "failed",
+      "error_category": "llm_rate_limited",
+      "error": "the LLM provider rate limit was exceeded (TPD)",
+      "gate_passed": false,
+      "quality_score": 0.935,
+      "predicted_category": "attribute_error",
+      "declared_insufficient": false,
+      "model_confidence": 0.7,
+      "observed_quotes": 2,
+      "grounded_quotes": 2,
+      "affected_files": [
+        "app/orders.py"
+      ],
+      "grounded_files": 1,
+      "attempts": [
+        {
+          "iteration": 1,
+          "latency_ms": 98421,
+          "input_tokens": 2006,
+          "output_tokens": 1554,
+          "truncated": false,
+          "valid_json": true,
+          "schema_valid": true,
+          "schema_error_fields": [],
+          "gate_score": 0.935,
+          "gate_passed": false,
+          "failed_checks": [
+            "trace_code_consistency",
+            "self_assessment"
+          ],
+          "decision": "retrying with evaluator feedback"
+        },
+        {
+          "iteration": 2,
+          "error_category": "llm_rate_limited"
+        }
+      ],
+      "patch": "--- a/app/orders.py\n+++ b/app/orders.py\n@@ -1,2 +1,2 @@\n def coupon_of(order):\n-    return order.coupon.code\n+    return getattr(order, \"discount_code\", None)",
+      "failed_check_details": {
+        "trace_code_consistency": "the error names attribute 'discount_code' but the retrieved failing line (line 2) only uses ['code', 'coupon']: the running code probably differs from the retrieved source. Do not propose a patch; set evidence_sufficient to false and explain the discrepancy in uncertainties",
+        "self_assessment": "model self-assessed 0.70 (uncalibrated)"
+      },
+      "wall_ms": 98945,
+      "run": 1
+    }
+  ]
+}
