@@ -346,6 +346,16 @@ rejected that analysis. Latency includes Groq queueing under rate limits, so it 
 The default stays `openai/gpt-oss-120b` until a complete run says otherwise. Calibration of the 20b model's
 self-assessed confidence (25 samples): Brier 0.24, and 0.61 accuracy in the 0.70-0.85 bin - overconfident.
 
+**Caller context, live** (`openai/gpt-oss-20b`, `rca-callers-v1`, 2026-10-10,
+[report](evals/results/rca-callers-live-openai_gpt-oss-20b-2026-10-10-callers2.md)): with caller context, 3 of 4
+cases were accepted and the control case ended correctly after 3 attempts. But two accepted analyses patched the
+*failing* function defensively instead of naming the caller (`caller-passes-none`, also with the wrong category,
+and `caller-two-levels-up`): the gate checks grounding and applicability, not whether the fix is in the right place,
+and the patch policy only allows the failing file. The comparison run without caller context stopped after one case
+on the provider's daily token limit, so **there is no live evidence yet that caller context improves accuracy** -
+only the mock comparison with scripted replies (grounded quotes 8/8 and 1 attempt per case with callers,
+5/8 and 3 attempts without).
+
 What the first live run showed, and what changed:
 
 - **The model did not fabricate evidence**: every "observed" quote was verbatim in the retrieved data (50/50).
@@ -708,7 +718,8 @@ One run of one bug - it shows the loop works end to end, not that it generalises
   the wrong file, and very large repos may hit truncated git trees.
 - Only the failing file (+/- 50 lines) and short windows (+/- 8 lines) around up to two calling frames are
   retrieved; causes further away (e.g. where a bad value was created, not where it was passed) are not visible.
-  Patches are limited to the failing file even when the fix belongs in a caller.
+  Patches are limited to the failing file even when the fix belongs in a caller. In the live caller run (below)
+  this pushed the model towards **symptomatic fixes** in the failing function, which the gate accepts.
 - The remediation branch name is deterministic per failure; a stale branch from an earlier, closed PR blocks a
   new PR until it is deleted (enable "automatically delete head branches" on the repository).
 - Evaluation labels and the retrieval dataset were authored by one person; metrics are indicative, not benchmarks.

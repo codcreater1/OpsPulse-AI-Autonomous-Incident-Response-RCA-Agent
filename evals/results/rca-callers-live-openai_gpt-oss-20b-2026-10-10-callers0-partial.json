@@ -1,0 +1,289 @@
+{
+  "mode": "live",
+  "started_at": "2026-10-10T12:41:35.687662+00:00",
+  "dataset_version": "rca-callers-v1",
+  "run_metadata": {
+    "agent_version": "1.1.0-opspulse",
+    "prompt_version": "rca-prompt-v5",
+    "evaluator_version": "quality-gate-v5",
+    "retrieval_strategy": "lexical-v1",
+    "model": "openai/gpt-oss-20b",
+    "quality_threshold": 0.85,
+    "max_analysis_iterations": 3,
+    "max_output_tokens": 4096
+  },
+  "metrics": {
+    "cases": 4,
+    "cases_not_evaluated": [
+      "caller-empty-list",
+      "caller-two-levels-up",
+      "control-cause-in-trigger"
+    ],
+    "structured_output_validity": {
+      "value": 1.0,
+      "numerator": 2,
+      "denominator": 2,
+      "definition": "LLM attempts whose reply validated against RCAOutput / LLM attempts (provider errors excluded)"
+    },
+    "category_accuracy": {
+      "value": 1.0,
+      "numerator": 1,
+      "denominator": 1,
+      "definition": "final category == labelled category / cases labelled conclusive"
+    },
+    "evidence_grounding_accuracy": {
+      "value": 1.0,
+      "numerator": 2,
+      "denominator": 2,
+      "definition": "'observed' quotes found verbatim in their cited source / all 'observed' quotes (final analyses)"
+    },
+    "unsupported_claim_rate": {
+      "value": 0.0,
+      "numerator": 0,
+      "denominator": 3,
+      "definition": "(unverifiable 'observed' quotes + affected files absent from trace/retrieved file) / (all quotes + all affected files)"
+    },
+    "abstention_recall": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "definition": "inconclusive-labelled cases where the model declared insufficient evidence or category 'unknown' / inconclusive-labelled cases"
+    },
+    "inconclusive_not_accepted_rate": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "definition": "inconclusive-labelled cases the quality gate did NOT accept / inconclusive-labelled cases"
+    },
+    "false_abstention_rate": {
+      "value": 0.0,
+      "numerator": 0,
+      "denominator": 1,
+      "definition": "conclusive-labelled cases where the model abstained / conclusive-labelled cases"
+    },
+    "gate_acceptance_rate": {
+      "value": 1.0,
+      "numerator": 1,
+      "denominator": 1,
+      "definition": "cases accepted by the quality gate / evaluated cases"
+    },
+    "false_acceptance_rate": {
+      "value": 0.0,
+      "numerator": 0,
+      "denominator": 1,
+      "definition": "accepted cases that are inconclusive-labelled or have the wrong category / accepted cases"
+    },
+    "relevant_file_hit_rate": {
+      "value": 0.0,
+      "numerator": 0,
+      "denominator": 1,
+      "definition": "cases whose affected_files contain a labelled relevant file / cases with labelled files"
+    },
+    "unsupported_acceptance_rate": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "definition": "unsupported analyses (inconclusive-labelled or with an unverifiable quote) the gate accepted / unsupported analyses"
+    },
+    "workflow_failure_rate": {
+      "value": 0.75,
+      "numerator": 3,
+      "denominator": 4,
+      "definition": "cases ending in workflow status 'failed' (e.g. provider errors) / cases"
+    },
+    "avg_attempts": 1.25,
+    "llm_latency_ms": {
+      "mean": 22911,
+      "p95": 39982,
+      "samples": 2
+    },
+    "case_wall_ms": {
+      "mean": 11530,
+      "p95": 45832
+    },
+    "tokens": {
+      "input": 4673,
+      "output": 5381,
+      "attempts_with_usage": 2
+    },
+    "estimated_cost_usd": null,
+    "calibration": {
+      "model_confidence": {
+        "samples": 1,
+        "brier": 0.04,
+        "bins": [
+          {
+            "range": "0.70-0.85",
+            "n": 1,
+            "mean_score": 0.8,
+            "accuracy": 1.0
+          }
+        ]
+      },
+      "quality_score": {
+        "samples": 1,
+        "brier": 0.0001,
+        "bins": [
+          {
+            "range": "0.85-1.00",
+            "n": 1,
+            "mean_score": 0.99,
+            "accuracy": 1.0
+          }
+        ]
+      }
+    }
+  },
+  "results": [
+    {
+      "case_id": "caller-passes-none",
+      "expected": {
+        "root_cause_category": "null_reference",
+        "inconclusive": false,
+        "relevant_files": [
+          "app/report.py"
+        ]
+      },
+      "workflow_status": "accepted",
+      "error_category": null,
+      "error": null,
+      "gate_passed": true,
+      "quality_score": 0.99,
+      "predicted_category": "null_reference",
+      "declared_insufficient": false,
+      "model_confidence": 0.8,
+      "observed_quotes": 2,
+      "grounded_quotes": 2,
+      "affected_files": [
+        "app/money.py"
+      ],
+      "grounded_files": 1,
+      "attempts": [
+        {
+          "iteration": 1,
+          "latency_ms": 5840,
+          "input_tokens": 2052,
+          "output_tokens": 3090,
+          "truncated": false,
+          "valid_json": true,
+          "schema_valid": true,
+          "schema_error_fields": [],
+          "gate_score": 0.565,
+          "gate_passed": false,
+          "failed_checks": [
+            "evidence_grounding",
+            "self_assessment",
+            "diff_applies",
+            "patch_locality",
+            "patch_effective"
+          ],
+          "decision": "retrying with evaluator feedback"
+        },
+        {
+          "iteration": 2,
+          "latency_ms": 39982,
+          "input_tokens": 2621,
+          "output_tokens": 2291,
+          "truncated": false,
+          "valid_json": true,
+          "schema_valid": true,
+          "schema_error_fields": [],
+          "gate_score": 0.99,
+          "gate_passed": true,
+          "failed_checks": [
+            "self_assessment"
+          ],
+          "decision": "quality gate passed"
+        }
+      ],
+      "wall_ms": 45832
+    },
+    {
+      "case_id": "caller-empty-list",
+      "expected": {
+        "root_cause_category": "logic_error",
+        "inconclusive": false,
+        "relevant_files": [
+          "app/orders.py"
+        ]
+      },
+      "workflow_status": "failed",
+      "error_category": "llm_rate_limited",
+      "error": "the LLM provider rate limit was exceeded (TPD)",
+      "gate_passed": false,
+      "quality_score": 0.0,
+      "predicted_category": null,
+      "declared_insufficient": false,
+      "model_confidence": null,
+      "observed_quotes": 0,
+      "grounded_quotes": 0,
+      "affected_files": [],
+      "grounded_files": 0,
+      "attempts": [
+        {
+          "iteration": 1,
+          "error_category": "llm_rate_limited"
+        }
+      ],
+      "wall_ms": 98
+    },
+    {
+      "case_id": "caller-two-levels-up",
+      "expected": {
+        "root_cause_category": "type_error",
+        "inconclusive": false,
+        "relevant_files": [
+          "app/handlers.py"
+        ]
+      },
+      "workflow_status": "failed",
+      "error_category": "llm_rate_limited",
+      "error": "the LLM provider rate limit was exceeded (TPD)",
+      "gate_passed": false,
+      "quality_score": 0.0,
+      "predicted_category": null,
+      "declared_insufficient": false,
+      "model_confidence": null,
+      "observed_quotes": 0,
+      "grounded_quotes": 0,
+      "affected_files": [],
+      "grounded_files": 0,
+      "attempts": [
+        {
+          "iteration": 1,
+          "error_category": "llm_rate_limited"
+        }
+      ],
+      "wall_ms": 97
+    },
+    {
+      "case_id": "control-cause-in-trigger",
+      "expected": {
+        "root_cause_category": "logic_error",
+        "inconclusive": false,
+        "relevant_files": [
+          "app/stats.py"
+        ]
+      },
+      "workflow_status": "failed",
+      "error_category": "llm_rate_limited",
+      "error": "the LLM provider rate limit was exceeded (TPD)",
+      "gate_passed": false,
+      "quality_score": 0.0,
+      "predicted_category": null,
+      "declared_insufficient": false,
+      "model_confidence": null,
+      "observed_quotes": 0,
+      "grounded_quotes": 0,
+      "affected_files": [],
+      "grounded_files": 0,
+      "attempts": [
+        {
+          "iteration": 1,
+          "error_category": "llm_rate_limited"
+        }
+      ],
+      "wall_ms": 93
+    }
+  ]
+}
