@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import sys
 import time
 from datetime import UTC, datetime
@@ -101,11 +102,13 @@ def run(
         "results": results,
     }
     out_dir.mkdir(parents=True, exist_ok=True)
-    model_tag = "mock" if mode == "mock" else settings.model_name.replace("/", "_")
-    stem = out_dir / f"rca-{dataset_name}-{mode}-{model_tag}-{started.strftime('%Y%m%dT%H%M%SZ')}"
-    stem.with_suffix(".json").write_text(json.dumps(report, indent=2), encoding="utf-8")
-    stem.with_suffix(".md").write_text(_summary(report), encoding="utf-8")
-    report["paths"] = [str(stem.with_suffix(".json")), str(stem.with_suffix(".md"))]
+    model_tag = "mock" if mode == "mock" else re.sub(r"[^A-Za-z0-9-]+", "_", settings.model_name)
+    # Model names may contain dots (qwen3.8-27b), so never derive the paths with Path.with_suffix.
+    stem = f"rca-{dataset_name}-{mode}-{model_tag}-{started.strftime('%Y%m%dT%H%M%SZ')}"
+    json_path, md_path = out_dir / f"{stem}.json", out_dir / f"{stem}.md"
+    json_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    md_path.write_text(_summary(report), encoding="utf-8")
+    report["paths"] = [str(json_path), str(md_path)]
     return report
 
 

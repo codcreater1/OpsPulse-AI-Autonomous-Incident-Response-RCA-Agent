@@ -74,6 +74,12 @@
       "denominator": 24,
       "definition": "cases whose affected_files contain a labelled relevant file / cases with labelled files"
     },
+    "unsupported_acceptance_rate": {
+      "value": 0.0,
+      "numerator": 0,
+      "denominator": 4,
+      "definition": "unsupported analyses (inconclusive-labelled or with an unverifiable quote) the gate accepted / unsupported analyses"
+    },
     "workflow_failure_rate": {
       "value": 0.0,
       "numerator": 0,
@@ -95,7 +101,32 @@
       "output": 54477,
       "attempts_with_usage": 33
     },
-    "estimated_cost_usd": null
+    "estimated_cost_usd": null,
+    "calibration": {
+      "model_confidence": {
+        "samples": 0,
+        "brier": null,
+        "bins": []
+      },
+      "quality_score": {
+        "samples": 26,
+        "brier": 0.129,
+        "bins": [
+          {
+            "range": "0.00-0.50",
+            "n": 5,
+            "mean_score": 0.285,
+            "accuracy": 0.0
+          },
+          {
+            "range": "0.85-1.00",
+            "n": 21,
+            "mean_score": 0.985,
+            "accuracy": 0.857
+          }
+        ]
+      }
+    }
   },
   "results": [
     {
@@ -1052,5 +1083,6 @@
       ],
       "wall_ms": 4193
     }
-  ]
+  ],
+  "rescored_at": "2026-10-10T12:03:19.675335+00:00"
 }

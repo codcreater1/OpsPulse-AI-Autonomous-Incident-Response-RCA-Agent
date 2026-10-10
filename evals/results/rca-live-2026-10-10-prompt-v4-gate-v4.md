@@ -15,6 +15,7 @@
 | gate_acceptance_rate | 0.808 | 21/26 | cases accepted by the quality gate / evaluated cases |
 | false_acceptance_rate | 0.143 | 3/21 | accepted cases that are inconclusive-labelled or have the wrong category / accepted cases |
 | relevant_file_hit_rate | 0.958 | 23/24 | cases whose affected_files contain a labelled relevant file / cases with labelled files |
+| unsupported_acceptance_rate | 0.000 | 0/4 | unsupported analyses (inconclusive-labelled or with an unverifiable quote) the gate accepted / unsupported analyses |
 | workflow_failure_rate | 0.000 | 0/26 | cases ending in workflow status 'failed' (e.g. provider errors) / cases |
 
 - Average attempts: 1.308

@@ -9,6 +9,8 @@ All notable changes are listed here. Versions of behaviour-critical components a
 - Benchmark regression gate: `python -m evals.compare_reports` (side-by-side tables incl. attempts, latency
   mean/p95, tokens per case, Brier; `--fail-on-regression`); committed mock baselines; CI fails on any quality
   regression for the tuning, holdout and adversarial datasets.
+- Live model comparison on `rca-cases-v1`: `openai/gpt-oss-20b` (26 cases) and `qwen/qwen3.8-27b` (9 of 26
+  evaluated; the rest hit the provider rate limit) against `openai/gpt-oss-120b`; reports in `evals/results/`.
 - Adversarial dataset `rca-adversarial-v1` (8 cases, one documented blind spot) and the metric
   `unsupported_acceptance_rate`.
 - Calibration bins and Brier score for model self-assessed confidence and the gate quality score (reported as
@@ -54,6 +56,7 @@ All notable changes are listed here. Versions of behaviour-critical components a
 - MIT license, security policy, contributing guide, ADRs, pre-commit hooks, Dependabot.
 
 ### Fixed
+- Report paths for model names containing a dot (e.g. `qwen3.8-27b`) were truncated by `Path.with_suffix`.
 - Default model `llama-3.3-70b-versatile` is no longer served by Groq; default is now `openai/gpt-oss-120b`.
 - CI: restored the `langchain` dependency required by Langfuse's LangChain handler; the handler is now imported
   lazily so a missing tracing integration cannot prevent startup.

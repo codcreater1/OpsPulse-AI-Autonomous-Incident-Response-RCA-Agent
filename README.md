@@ -300,6 +300,35 @@ acceptance, 1 attempt each. The 5 not yet evaluated include the deploy-drift cas
 this is **not yet evidence that the gains generalise**
 ([partial report](evals/results/rca-holdout-live-2026-10-10-prompt-v4-gate-v4-partial.md)).
 
+**Model comparison** (2026-10-10, `rca-cases-v1`, prompt v4, gate v4; reports in
+[`evals/results/`](evals/results), table from `python -m evals.compare_reports`). `qwen/qwen3.8-27b` hit Groq's
+per-minute limit on 17 of 26 cases even with backoff, so only **9 cases** are comparable across all three models:
+
+| Same 9 cases | gpt-oss-120b | gpt-oss-20b | qwen3.8-27b |
+|---|---|---|---|
+| category_accuracy | 7/8 | 4/8 | 8/8 |
+| false_acceptance_rate | 0/7 | 2/6 | 0/6 |
+| evidence_grounding_accuracy | 16/16 | 13/14 | 18/21 |
+| structured_output_validity (per attempt) | 9/12 | 12/16 | 9/10 |
+| average attempts | 1.33 | 1.78 | 1.11 |
+
+| All 26 cases | gpt-oss-120b | gpt-oss-20b |
+|---|---|---|
+| category_accuracy | 0.82 (18/22) | 0.64 (14/22) |
+| false_acceptance_rate | 0.14 (3/21) | 0.28 (5/18) |
+| evidence_grounding_accuracy | 1.00 (52/52) | 0.97 (38/39) |
+| structured_output_validity | 0.91 (31/34) | 0.81 (34/42) |
+| inconclusive cases not accepted | 4/4 | 4/4 |
+| average attempts / tokens per case | 1.31 / 4.8k | 1.62 / 5.7k |
+| LLM latency mean / p95 | 12.3 s / 38.4 s | 18.3 s / 38.5 s |
+
+Reading: the smaller `gpt-oss-20b` is worse on every quality metric and is not cheaper per case, because it needs
+more attempts. `qwen3.8-27b` looks strong on 9 cases, but 9 cases cannot separate it from `gpt-oss-120b`. All
+three quotes it could not support came from one case (`message-only`, where no source code exists), and the gate
+rejected that analysis. Latency includes Groq queueing under rate limits, so it is not a model speed benchmark.
+The default stays `openai/gpt-oss-120b` until a complete run says otherwise. Calibration of the 20b model's
+self-assessed confidence (25 samples): Brier 0.24, and 0.61 accuracy in the 0.70-0.85 bin - overconfident.
+
 What the first live run showed, and what changed:
 
 - **The model did not fabricate evidence**: every "observed" quote was verbatim in the retrieved data (50/50).
