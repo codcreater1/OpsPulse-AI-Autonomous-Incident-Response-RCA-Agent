@@ -176,7 +176,11 @@ def _analyze_root_cause(state: IncidentState, config: RunnableConfig, model_fact
     schema_valid = False
     schema_error_fields: list[str] = []
     if analysis is None:
-        analysis = {"output_error": "the model did not return a valid JSON object"}
+        analysis = {
+            "output_error": "the reply was cut off at the output-token limit; answer more concisely"
+            if reply.truncated
+            else "the model did not return a valid JSON object"
+        }
     else:
         try:
             analysis = RCAOutput.model_validate(analysis).model_dump()
@@ -195,6 +199,7 @@ def _analyze_root_cause(state: IncidentState, config: RunnableConfig, model_fact
         "latency_ms": reply.latency_ms,
         "input_tokens": reply.input_tokens,
         "output_tokens": reply.output_tokens,
+        "truncated": reply.truncated,
         "valid_json": "output_error" not in analysis,
         "schema_valid": schema_valid,
         "schema_error_fields": schema_error_fields,

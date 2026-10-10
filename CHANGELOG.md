@@ -6,6 +6,12 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Added
+- `LLM_MAX_OUTPUT_TOKENS` (was fixed at 4096, now part of run metadata); replies stopped by the limit are flagged
+  `truncated` in the attempt trace and the next attempt gets "answer more concisely" feedback.
+- Rate-limit errors name the provider limit that was hit (e.g. `(TPD)`), without the provider's message text;
+  evaluation results record this error text.
+- Live end-to-end demo result (`evals/results/demo-live-2026-10-10.json`): test fails -> accepted analysis ->
+  patch applied in a sandbox -> 3/3 tests pass.
 - Benchmark regression gate: `python -m evals.compare_reports` (side-by-side tables incl. attempts, latency
   mean/p95, tokens per case, Brier; `--fail-on-regression`); committed mock baselines; CI fails on any quality
   regression for the tuning, holdout and adversarial datasets.

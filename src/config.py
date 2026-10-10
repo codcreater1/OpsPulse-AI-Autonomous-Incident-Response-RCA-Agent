@@ -121,6 +121,11 @@ class Settings:
     model_name: str = field(default_factory=lambda: _env("MODEL_NAME", "GROQ_MODEL", default="openai/gpt-oss-120b"))
     llm_timeout_seconds: float = field(default_factory=lambda: _number(("LLM_TIMEOUT_SECONDS",), 60.0, float, 5, 300))
     llm_max_retries: int = field(default_factory=lambda: int(_number(("LLM_MAX_RETRIES",), 2, int, 0, 5)))
+    # Upper bound on one reply. Some provider tiers cap output tokens per minute (e.g. 1000), and a request whose
+    # expected output exceeds the cap is refused outright, so this must stay below such a cap to use the model.
+    llm_max_output_tokens: int = field(
+        default_factory=lambda: int(_number(("LLM_MAX_OUTPUT_TOKENS",), 4096, int, 256, 32768))
+    )
     # Optional USD prices per million tokens, used only for cost estimates in evaluation reports.
     llm_cost_input_per_mtok: float = field(
         default_factory=lambda: _number(("LLM_COST_INPUT_PER_MTOK",), 0.0, float, 0, 1000)

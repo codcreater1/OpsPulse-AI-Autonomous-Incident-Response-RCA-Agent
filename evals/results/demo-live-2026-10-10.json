@@ -1,0 +1,21 @@
+{
+  "started_at": "2026-10-10T12:27:26.532436+00:00",
+  "model": "openai/gpt-oss-120b",
+  "tests_before": {
+    "exit_code": 1,
+    "summary": "1 failed, 2 passed in 0.34s"
+  },
+  "analysis": {
+    "workflow_status": "accepted",
+    "attempts": 1,
+    "quality_score": 0.99,
+    "gate_passed": true,
+    "category": "missing_key",
+    "patch": "--- a/inventory.py\n+++ b/inventory.py\n@@ -6,2 +6,2 @@\n def available(sku):\n-    return STOCK.get(sku)\n+    return STOCK.get(sku, 0)",
+    "error_category": null
+  },
+  "tests_after": {
+    "exit_code": 0,
+    "summary": "3 passed in 0.02s"
+  }
+}

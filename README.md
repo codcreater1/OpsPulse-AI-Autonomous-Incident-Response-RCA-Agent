@@ -130,7 +130,8 @@ truth without a demonstrated benefit; a crashed claim simply restarts the analys
 4. **retrieve_historical_incidents** - ranked, explained matches from the *same repository only*.
 5. **analyze_root_cause** - one LLM attempt (`iterations += 1`). Malformed output counts as an attempt; provider
    failures (auth, rate limit, timeout, unknown model) end the workflow as `failed` - they are not retried by the
-   loop (the SDK performs at most `LLM_MAX_RETRIES` transport retries).
+   loop (the SDK performs at most `LLM_MAX_RETRIES` transport retries). `LLM_MAX_OUTPUT_TOKENS` (default 4096)
+   bounds one reply; replies cut at that limit are flagged `truncated` and the next attempt is asked to be concise.
 6. **evaluate_analysis** - runs the gate and decides: `accepted`, retry with feedback, or `needs_review` (budget
    exhausted, model reported insufficient evidence, no source to ground a retry, or a grounded analysis that
    correctly proposes no code change).
@@ -257,7 +258,11 @@ python -m evals.compare_reports A.json B.json C.json        # side-by-side table
   the blind-spot case, chose the right explanation from contradicting history (5/5 categories, no false acceptance),
   and on the truncated trace answered `unknown` but quoted one line it never saw - the gate rejected that analysis.
   The two cases that matter most (guessing without source, deploy drift) could not run because of the
-  output-tokens-per-minute cap above, so this is **not** evidence that the model resists those. An accepted analysis
+  output-tokens-per-minute cap above, so this is **not** evidence that the model resists those. A rerun with
+  `LLM_MAX_OUTPUT_TOKENS=900` ([report](evals/results/rca-adversarial-live-qwen_qwen3_8-27b-2026-10-10-otpm900.md))
+  got through, but most replies were cut at 900 tokens (`truncated` in the attempt trace): the *guess without
+  source* rejection came from a truncated, schema-invalid reply, so it is not evidence either. On *deploy drift* the
+  third, complete reply declared insufficient evidence and `trace_code_consistency` also flagged it - not accepted. An accepted analysis
   still only creates a pending approval; text in a log cannot approve anything.
 - **`unsupported_acceptance_rate`** = accepted analyses among those that are inconclusive-labelled or contain an
   unverifiable quote / such analyses.
@@ -636,6 +641,11 @@ in a subprocess, runs the OpsPulse graph on the real traceback, applies an accep
 pure-Python diff applier (generated code is never executed in-process) and re-runs the tests in a subprocess.
 Local mock run: 3 passed after the patch. In mock mode the analysis is scripted, so this demonstrates the
 pipeline, gate and sandboxed verification - **not** the model's ability. PR creation is not part of the demo.
+
+**Live run** (`openai/gpt-oss-120b`, 2026-10-10, [report](evals/results/demo-live-2026-10-10.json)): accepted on the
+first attempt (quality score 0.99), category `missing_key`, root cause "the SKU is absent from `STOCK`, so
+`available()` returns `None`", patch `STOCK.get(sku)` -> `STOCK.get(sku, 0)`; tests after the patch: 3 passed.
+One run of one bug - it shows the loop works end to end, not that it generalises.
 
 ## Security model
 

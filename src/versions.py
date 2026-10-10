@@ -25,4 +25,5 @@ def run_metadata() -> dict[str, Any]:
         "model": settings.model_name,
         "quality_threshold": settings.quality_threshold,
         "max_analysis_iterations": settings.max_analysis_iterations,
+        "max_output_tokens": settings.llm_max_output_tokens,
     }

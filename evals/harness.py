@@ -213,6 +213,7 @@ def run_case(case: EvalCase, model_factory: ModelFactory | None) -> dict[str, An
         "expected": case.expected.model_dump(),
         "workflow_status": final["workflow_status"],
         "error_category": final["error_category"],
+        "error": final.get("error"),  # our own message (e.g. which provider limit), never provider text
         "gate_passed": final["quality_gate_passed"],
         "quality_score": final["quality_score"],
         "predicted_category": analysis.get("root_cause_category"),

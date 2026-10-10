@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -39,7 +40,7 @@ def get_chat_model(temperature: float) -> Runnable:
         model=settings.model_name,
         api_key=SecretStr(settings.groq_api_key),
         temperature=temperature,
-        max_tokens=4096,
+        max_tokens=settings.llm_max_output_tokens,
         max_retries=settings.llm_max_retries,
         timeout=settings.llm_timeout_seconds,
     )
@@ -52,6 +53,19 @@ def _error_code(exc: groq.APIStatusError) -> str | None:
     error = body.get("error", body)
     code = error.get("code") if isinstance(error, dict) else None
     return code if isinstance(code, str) else None
+
+
+_LIMIT_KIND = re.compile(r"\((TPM|TPD|RPM|RPD|OTPM|ASH|ASD)\)")
+
+
+def _limit_kind(exc: groq.APIStatusError) -> str:
+    """Which provider limit was hit, e.g. "TPD" (tokens per day). Only this label is kept from the message,
+    which also names the organisation."""
+    body = exc.body if isinstance(exc.body, dict) else {}
+    error = body.get("error", body)
+    message = error.get("message") if isinstance(error, dict) else None
+    match = _LIMIT_KIND.search(message) if isinstance(message, str) else None
+    return f" ({match.group(1)})" if match else ""
 
 
 def _is_request_too_large(exc: groq.APIStatusError) -> bool:
@@ -69,6 +83,7 @@ class LLMReply:
     latency_ms: int
     input_tokens: int | None = None  # as reported by the provider; None when not reported
     output_tokens: int | None = None
+    truncated: bool = False  # the reply stopped at the output-token limit (finish_reason == "length")
 
 
 ModelFactory = Callable[[float], Runnable]  # temperature -> chat model
@@ -105,8 +120,10 @@ def invoke_json_model(
         raise LLMError("model_unavailable", f"model {settings.model_name!r} is unavailable") from exc
     except groq.RateLimitError as exc:
         if _is_request_too_large(exc):
-            raise LLMError("request_too_large", "one request exceeds the provider's per-minute token limit") from exc
-        raise LLMError("rate_limited", "the LLM provider rate limit was exceeded") from exc
+            raise LLMError(
+                "request_too_large", f"one request exceeds the provider's per-minute token limit{_limit_kind(exc)}"
+            ) from exc
+        raise LLMError("rate_limited", f"the LLM provider rate limit was exceeded{_limit_kind(exc)}") from exc
     except groq.APITimeoutError as exc:
         raise LLMError("timeout", "the LLM provider timed out") from exc
     except groq.APIConnectionError as exc:
@@ -120,6 +137,7 @@ def invoke_json_model(
         latency_ms=_elapsed_ms(started),
         input_tokens=usage.get("input_tokens"),
         output_tokens=usage.get("output_tokens"),
+        truncated=(getattr(response, "response_metadata", None) or {}).get("finish_reason") == "length",
     )
 
 

@@ -60,3 +60,31 @@ def test_missing_api_key_is_reported_as_not_configured():
     with pytest.raises(LLMError) as info:
         llm.get_chat_model(0.0)
     assert info.value.category == "not_configured"
+
+
+class Replying:
+    def __init__(self, message):
+        self.message = message
+
+    def invoke(self, messages, config=None):
+        return self.message
+
+
+def test_reply_cut_off_at_the_token_limit_is_flagged(monkeypatch):
+    from langchain_core.messages import AIMessage
+
+    cut = AIMessage(content='{"incident_summary": {', response_metadata={"finish_reason": "length"})
+    monkeypatch.setattr(llm, "get_chat_model", lambda temperature: Replying(cut))
+    assert invoke_json_model([], 0.0, None).truncated is True
+    done = AIMessage(content="{}", response_metadata={"finish_reason": "stop"})
+    monkeypatch.setattr(llm, "get_chat_model", lambda temperature: Replying(done))
+    assert invoke_json_model([], 0.0, None).truncated is False
+
+
+def test_rate_limit_message_keeps_only_the_limit_kind(monkeypatch):
+    message = "Rate limit reached for model `m` in organization `org_secret` on tokens per day (TPD): Limit 200000"
+    exc = _status_error(groq.RateLimitError, 429, "rate_limit_exceeded", message)
+    monkeypatch.setattr(llm, "get_chat_model", lambda temperature: Raising(exc))
+    with pytest.raises(LLMError) as info:
+        invoke_json_model([], 0.0, None)
+    assert str(info.value) == "the LLM provider rate limit was exceeded (TPD)"
