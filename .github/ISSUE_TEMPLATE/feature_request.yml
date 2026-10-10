@@ -1,0 +1,22 @@
+name: Feature request
+description: Propose a capability or a new evaluation case
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can the agent not do, or do wrongly? A failing evaluation case is the best evidence.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: How would it work, and how would we measure that it works (metric, dataset, baseline)?
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety
+      options:
+        - label: It does not weaken human approval, the allow-list or the patch policy (or says clearly how it does)

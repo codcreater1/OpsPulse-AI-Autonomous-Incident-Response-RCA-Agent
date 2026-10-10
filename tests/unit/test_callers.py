@@ -72,3 +72,21 @@ def test_quotes_from_a_caller_are_grounded_only_with_caller_context(set_settings
     set_settings(caller_frames=0)
     without = run()
     assert without["grounded_quotes"] < without["observed_quotes"]
+
+
+def test_patch_next_to_a_diagnosis_citing_caller_code_is_rejected_then_routed_to_a_human():
+    case = CASES["caller-symptomatic-patch"]
+    model = ScriptedModel(case)
+    result = run_case(case, lambda temperature: model)
+    first, second = result["attempts"]
+    assert first["gate_passed"] is False and "fix_location" in first["failed_checks"]
+    assert "caller" in first["decision"] or first["decision"] == "retrying with evaluator feedback"
+    assert second["gate_passed"] is False  # no patch left: grounded analysis, nothing to propose
+    assert result["workflow_status"] == "needs_review" and result["predicted_category"] == "null_reference"
+
+
+def test_fix_location_does_not_fire_for_quotes_from_the_failing_window():
+    result = run_case(
+        CASES["control-cause-in-trigger"], lambda temperature: ScriptedModel(CASES["control-cause-in-trigger"])
+    )
+    assert result["gate_passed"] is True and "fix_location" not in result["attempts"][0]["failed_checks"]

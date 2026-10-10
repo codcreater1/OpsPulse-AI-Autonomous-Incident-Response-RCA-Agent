@@ -83,6 +83,26 @@ case(
     [reply("logic_error", quote='payers = order.get("payers", [])', fix=None)],
 )
 
+case(
+    "caller-symptomatic-patch",
+    "The model quotes the calling code but patches the callee; the gate must ask where the fix belongs",
+    {"app/money.py": MONEY, "app/report.py": REPORT},
+    [("app/report.py", "render_rows", "format_amount(row.get"), ("app/money.py", "format_amount", "round(value")],
+    "TypeError: type NoneType doesn't define __round__ method",
+    {"root_cause_category": "null_reference", "relevant_files": ["app/report.py"]},
+    [
+        reply(
+            "null_reference",
+            quote='format_amount(row.get("amount"))',
+            fix={
+                "old": '    return f"{round(value, 2):.2f} EUR"\n',
+                "new": '    if value is None:\n        return "n/a"\n    return f"{round(value, 2):.2f} EUR"\n',
+            },
+        ),
+        reply("null_reference", quote='format_amount(row.get("amount"))', fix=None),
+    ],
+)
+
 UTIL = """def page_offset(page, size):
     return (page - 1) * size
 """
@@ -150,7 +170,7 @@ case(
 
 
 def main() -> None:
-    OUT.write_text(json.dumps({"version": "rca-callers-v1", "cases": CASES}, indent=2) + "\n", encoding="utf-8")
+    OUT.write_text(json.dumps({"version": "rca-callers-v2", "cases": CASES}, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {len(CASES)} caller cases to {OUT}")
 
 

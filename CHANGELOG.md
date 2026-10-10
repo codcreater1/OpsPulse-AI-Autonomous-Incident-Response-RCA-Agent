@@ -11,6 +11,9 @@ All notable changes are listed here. Versions of behaviour-critical components a
   dataset `rca-callers-v1` (4 cases, one control) with a mock baseline in the CI regression gate.
 - Live caller-context run with `gpt-oss-20b` (4 cases): two accepted analyses fixed the symptom in the failing
   function rather than naming the caller; documented as a limitation. The run without callers hit the daily limit.
+- `quality-gate-v6`: `fix_location` (blocking) - a patch to the failing function is rejected when the observed
+  evidence quotes code that exists only in a caller window; `diff_applies` weight 0.25 -> 0.20. Dataset
+  `rca-callers-v2` adds `caller-symptomatic-patch`.
 - `POST /integrations/alertmanager` (Prometheus Alertmanager webhook receiver, idempotent per alert, per-alert
   outcomes) and `Authorization: Bearer <key>` accepted on every endpoint.
 - `LLM_MAX_OUTPUT_TOKENS` (was fixed at 4096, now part of run metadata); replies stopped by the limit are flagged

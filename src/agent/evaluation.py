@@ -26,7 +26,8 @@ CHECK_WEIGHTS: dict[str, float] = {
     "evidence_grounding": 0.15,
     "affected_files_grounding": 0.05,
     "diff_wellformed": 0.10,
-    "diff_applies": 0.25,
+    "diff_applies": 0.20,
+    "fix_location": 0.05,
     "patch_minimal": 0.05,
     "patch_locality": 0.05,
     "trace_code_consistency": 0.05,
@@ -39,6 +40,7 @@ BLOCKING_CHECKS = frozenset(
         "trigger_grounding",
         "evidence_grounding",
         "trace_code_consistency",
+        "fix_location",
         "diff_wellformed",
         "diff_applies",
         "patch_effective",
@@ -280,6 +282,42 @@ def check_trace_code_consistency(inp: EvaluationInput) -> CheckResult:
     )
 
 
+def _window_text(block: str | None) -> str:
+    try:
+        return "\n".join(parse_code_window(block or "")[1])
+    except PatchError:
+        return ""
+
+
+def check_fix_location(inp: EvaluationInput) -> CheckResult:
+    """A patch to the failing function must not sit next to a diagnosis that rests on caller code.
+
+    When an 'observed' quote occurs only in the caller windows (not in the failing file's window), the model is
+    reasoning about what a caller passed. A guard in the callee can then merely hide the symptom, and callers may
+    not be patched. The analysis has to report the caller and leave the diff empty; the incident then goes to a
+    human reviewer instead of becoming a pull request. A callee guard can be right, but a deterministic gate cannot
+    tell, so it does not accept it.
+    """
+    if not inp.patch or not inp.caller_context:
+        return CheckResult(1.0, "ok")
+    own, callers = _squash(_window_text(inp.code_context)), _squash(_window_text(inp.caller_context))
+    cited = []
+    for item in _list(inp.analysis, "evidence"):
+        if not (isinstance(item, dict) and item.get("kind") == "observed" and item.get("source") == "code_context"):
+            continue
+        quote = _squash(str(item.get("quote") or ""))
+        if len(quote) >= MIN_QUOTE_CHARS and quote in callers and quote not in own:
+            cited.append(quote[:50])
+    if not cited:
+        return CheckResult(1.0, "ok")
+    return CheckResult(
+        0.0,
+        "the evidence cites code that only occurs in a caller (" + "; ".join(repr(q) for q in cited[:2]) + ") but the "
+        "patch changes the failing function, which may only hide the symptom. If the fix belongs in the caller, "
+        "report that in uncertainties and leave unified_diff empty (the incident then goes to a human)",
+    )
+
+
 def check_self_assessment(analysis: dict[str, Any]) -> CheckResult:
     flow = _section(analysis, "control_flow")
     if flow.get("needs_human_review") is True:
@@ -359,6 +397,7 @@ def evaluate(inp: EvaluationInput, threshold: float) -> Evaluation:
         "evidence_grounding": check_evidence(inp),
         "affected_files_grounding": check_affected_files(inp),
         "trace_code_consistency": check_trace_code_consistency(inp),
+        "fix_location": check_fix_location(inp),
         "self_assessment": check_self_assessment(inp.analysis),
         **check_patch(inp),
     }

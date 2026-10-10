@@ -1,0 +1,32 @@
+name: Bug report
+description: Something behaves differently from what the README or API documents
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not paste secrets, API keys, tokens or private source code.** Redact repository names if needed.
+        For security problems use the private reporting channel in SECURITY.md instead of an issue.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: A request body (redacted), a mock-mode evaluation case or a failing unit test is ideal.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: "`prompt_version`, `evaluator_version` and `model` from the incident's analysis or report, plus Python version."
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines (redacted)
+      render: text

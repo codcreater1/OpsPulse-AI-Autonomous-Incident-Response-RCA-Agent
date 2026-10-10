@@ -20,6 +20,25 @@ which waits for an **explicit human approval** and is never merged automatically
 
 ![Review console with incidents awaiting approval (demo data)](docs/images/console-incidents.jpg)
 
+## At a glance
+
+What was measured (all on small, author-labelled synthetic sets - indicative, not benchmarks; details and
+caveats in [Evaluation](#evaluation)):
+
+| | Result | Where |
+|---|---|---|
+| Live model, 26 tuning cases (`gpt-oss-120b`, prompt v4) | category 18/22, quotes verified 52/52, 4/4 inconclusive cases not accepted, 1.31 attempts/case | [Live results](#live-results-openaigpt-oss-120b-on-groq-2026-10-09) |
+| Held-out set (never used for tuning) | 7/12 evaluated live so far (7/7 correct); 5 pending a provider quota | [Held-out](#live-results-openaigpt-oss-120b-on-groq-2026-10-09) |
+| Smaller / other models, same cases | `gpt-oss-20b` 14/22 and more false acceptances; `qwen3.8-27b` only 9 cases evaluable (rate limits) | [Model comparison](#live-results-openaigpt-oss-120b-on-groq-2026-10-09) |
+| Adversarial set (bait: fabricated lines, foreign files, injected "approve" text ...) | all bait rejected by the gate in mock mode; one *documented* blind spot is accepted; live: no bait taken (6/8 cases) | [Regression gate](#regression-gate-adversarial-set-and-calibration) |
+| Retrieval (`lexical-v1` vs fingerprint baseline) | recall@3 0.46 -> 0.93, MRR 0.56 -> 1.0, 0 cross-repository leaks | [Retrieval](#retrieval) |
+| End to end, real bug, live model | failing test -> accepted analysis -> patch applied in a sandbox -> tests pass (one run) | [Demo](#demo) |
+
+**Known limits, stated up front:** the gate proves grounding and applicability, not correctness; a grounded but wrong
+diagnosis can be accepted (documented blind spot); the fix is limited to the failing file; no tests of the target
+repository are run by the service; Sentry, Alertmanager, GitHub PR creation and Langfuse were exercised through
+fakes, not against live services. See [Known limitations](#known-limitations).
+
 ## Contents
 
 - [Features](#features) · [Architecture](#architecture) · [Workflow and statuses](#workflow-and-statuses)
@@ -43,7 +62,7 @@ which waits for an **explicit human approval** and is never merged automatically
 | Persistence | PostgreSQL/Neon via SQLAlchemy 2, Alembic migrations, failure taxonomy (`error_category`) |
 | Observability | Structured JSON logs with incident correlation and secret redaction; Langfuse v4 traces with content masking by default; Prometheus `/metrics` (content-free labels) |
 | Evaluation | 26-case synthetic RCA dataset, deterministic metrics, mock and live modes; labelled retrieval dataset comparing two ranking strategies |
-| Delivery | 216 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
+| Delivery | 245 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
 
 ## Architecture
 
@@ -164,7 +183,8 @@ the total, and the total must reach `QUALITY_THRESHOLD` (default 0.85).
 | `evidence_grounding` | 0.15 | yes | every *observed* evidence quote occurs verbatim in the source it cites (trace / retrieved code / history); quoting code that was never retrieved fails |
 | `affected_files_grounding` | 0.05 | | listed files appear in the trace or are the retrieved file |
 | `diff_wellformed` | 0.10 | yes | parseable single-file diff whose header is the affected file |
-| `diff_applies` | 0.25 | yes | the diff applies to the retrieved source window |
+| `diff_applies` | 0.20 | yes | the diff applies to the retrieved source window |
+| `fix_location` | 0.05 | yes | a patch to the failing function is not accepted when an *observed* quote occurs only in a caller window: the diagnosis rests on what a caller passed, so a callee guard may only hide the symptom. The analysis must report the caller and leave the diff empty; it then goes to a human |
 | `patch_minimal` | 0.05 | | changed lines within `MAX_PATCH_CHANGED_LINES` |
 | `patch_locality` | 0.05 | | a hunk lands within 30 lines of the failing line |
 | `trace_code_consistency` | 0.05 | yes | the key/attribute named by the error appears on the retrieved failing line (not applicable to dynamic or unparsable lines) |
@@ -350,8 +370,10 @@ self-assessed confidence (25 samples): Brier 0.24, and 0.61 accuracy in the 0.70
 [report](evals/results/rca-callers-live-openai_gpt-oss-20b-2026-10-10-callers2.md)): with caller context, 3 of 4
 cases were accepted and the control case ended correctly after 3 attempts. But two accepted analyses patched the
 *failing* function defensively instead of naming the caller (`caller-passes-none`, also with the wrong category,
-and `caller-two-levels-up`): the gate checks grounding and applicability, not whether the fix is in the right place,
-and the patch policy only allows the failing file. The comparison run without caller context stopped after one case
+and `caller-two-levels-up`): the `quality-gate-v5` that ran checked grounding and applicability, not whether the fix is in the right place,
+and the patch policy only allows the failing file. `quality-gate-v6` (`fix_location`) now rejects a patch whose
+diagnosis cites caller-only code (mock case `caller-symptomatic-patch`; dataset `rca-callers-v2`); it has **not**
+been run live yet. The comparison run without caller context stopped after one case
 on the provider's daily token limit, so **there is no live evidence yet that caller context improves accuracy** -
 only the mock comparison with scripted replies (grounded quotes 8/8 and 1 attempt per case with callers,
 5/8 and 3 attempts without).
@@ -718,8 +740,10 @@ One run of one bug - it shows the loop works end to end, not that it generalises
   the wrong file, and very large repos may hit truncated git trees.
 - Only the failing file (+/- 50 lines) and short windows (+/- 8 lines) around up to two calling frames are
   retrieved; causes further away (e.g. where a bad value was created, not where it was passed) are not visible.
-  Patches are limited to the failing file even when the fix belongs in a caller. In the live caller run (below)
-  this pushed the model towards **symptomatic fixes** in the failing function, which the gate accepts.
+  Patches are limited to the failing file even when the fix belongs in a caller. The first live caller run
+  (`quality-gate-v5`, below) showed the model patching the failing function for a caller's bad argument and the
+  gate accepting it; `quality-gate-v6` adds `fix_location` for the case where the diagnosis *quotes* the caller.
+  A symptomatic patch whose diagnosis never mentions the caller is still undetectable.
 - The remediation branch name is deterministic per failure; a stale branch from an earlier, closed PR blocks a
   new PR until it is deleted (enable "automatically delete head branches" on the repository).
 - Evaluation labels and the retrieval dataset were authored by one person; metrics are indicative, not benchmarks.
