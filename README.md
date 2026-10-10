@@ -615,7 +615,7 @@ pipeline, gate and sandboxed verification - **not** the model's ability. PR crea
 
 Developed and tested on Windows with Python 3.11.9 and: fastapi 0.143.0, pydantic 2.14.0, SQLAlchemy 2.1.4,
 alembic 1.20.0, langgraph 1.2.14, langchain-core 1.6.9, langchain-groq 1.1.3, groq 0.37.1, langfuse 4.17.0,
-PyGithub 2.10.0, prometheus-client 0.26.0, pytest 9.1.1, ruff 0.16.10, mypy 1.20.2. langfuse and langgraph were the latest releases on
+PyGithub 2.10.0, prometheus-client 0.26.0, pytest 9.1.1, ruff 0.16.10, mypy 1.20.2 and 2.4.0. langfuse and langgraph were the latest releases on
 PyPI at the time of checking (2026-10-09).
 
 ## License
