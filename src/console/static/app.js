@@ -168,6 +168,7 @@ function renderDetail(incident) {
     checks.append(row);
   }
 
+  renderAttempts(analysis.attempts || []);
   renderDiff(incident.suggested_patch);
   $("retry").hidden = incident.status !== "failed";
   const pending = incident.pending_approval;
@@ -181,6 +182,34 @@ function usageSummary(attempts) {
   const tokens = sum("input_tokens") + sum("output_tokens");
   const seconds = sum("latency_ms") / 1000;
   return `${attempts.length} call(s), ${tokens.toLocaleString()} tokens, ${seconds.toFixed(1)} s`;
+}
+
+function renderAttempts(attempts) {
+  const body = $("d-attempts");
+  body.replaceChildren();
+  for (const a of attempts) {
+    const row = document.createElement("tr");
+    let gate = "not run";
+    let cls = "muted";
+    if (a.error_category) { gate = a.error_category; cls = "s-bad"; }
+    else if (a.gate_score !== undefined) {
+      gate = `${Number(a.gate_score).toFixed(2)} ${a.gate_passed ? "pass" : "fail"}`;
+      cls = a.gate_passed ? "s-ok" : "s-bad";
+    }
+    const failed = [...(a.failed_checks || []), ...(a.schema_error_fields || []).map((f) => `schema ${f}`)];
+    const llm = a.latency_ms === undefined ? "-"
+      : `${((Number(a.input_tokens) || 0) + (Number(a.output_tokens) || 0)).toLocaleString()} tok, ${(a.latency_ms / 1000).toFixed(1)} s`;
+    row.append(el("td", String(a.iteration ?? "?")), el("td", gate, cls), el("td", failed.join(", ") || "-"),
+      el("td", a.decision || "-"), el("td", llm));
+    body.append(row);
+  }
+  if (!attempts.length) {
+    const row = document.createElement("tr");
+    const cell = el("td", "No attempts recorded.", "muted");
+    cell.colSpan = 5;
+    row.append(cell);
+    body.append(row);
+  }
 }
 
 function fillList(id, values) {

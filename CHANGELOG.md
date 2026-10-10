@@ -6,6 +6,15 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Added
+- Benchmark regression gate: `python -m evals.compare_reports` (side-by-side tables incl. attempts, latency
+  mean/p95, tokens per case, Brier; `--fail-on-regression`); committed mock baselines; CI fails on any quality
+  regression for the tuning, holdout and adversarial datasets.
+- Adversarial dataset `rca-adversarial-v1` (8 cases, one documented blind spot) and the metric
+  `unsupported_acceptance_rate`.
+- Calibration bins and Brier score for model self-assessed confidence and the gate quality score (reported as
+  calibration data, not as probabilities).
+- Per-attempt gate verdict (score, failed checks, decision) in the attempt trace and an *Attempts* table in the
+  review console.
 - Transient provider errors (rate limit, timeout, outage) re-queue the incident with exponential backoff
   (migration 0006 `available_at`); `POST /incidents/{id}/retry` and a console *Retry* button for failed incidents.
 - Reviewer notifications to an https incoming webhook (Slack/Mattermost format) for selected statuses;

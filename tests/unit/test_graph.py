@@ -36,6 +36,10 @@ def test_self_correction_passes_feedback_and_previous_attempt(fake_llm):
     assert "<PREVIOUS_FEEDBACK>" not in llm.prompts[0]
     assert "<PREVIOUS_FEEDBACK>" in llm.prompts[1] and "diff_applies" in llm.prompts[1]
     assert "<PREVIOUS_ATTEMPT>" in llm.prompts[1]
+    first, second = final["attempts"]  # per-attempt trace shown in the review console
+    assert first["gate_passed"] is False and "diff_applies" in first["failed_checks"]
+    assert first["decision"] == "retrying with evaluator feedback"
+    assert second["gate_passed"] is True and "diff_applies" not in second["failed_checks"]
 
 
 def test_retry_budget_is_exhausted_and_graph_terminates(fake_llm, set_settings):

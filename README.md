@@ -231,6 +231,38 @@ These numbers say the gate rejected every fabricated quote, injection-compliant 
 in the scripted set and accepted no inconclusive case. They say **nothing about how good the LLM is** - see the
 live results below.
 
+### Regression gate, adversarial set and calibration
+
+```bash
+python -m evals.run_rca --mode mock --dataset adversarial
+python -m evals.compare_reports evals/baselines/rca-tuning-mock.json evals/reports/rca-tuning-mock-*.json --fail-on-regression
+python -m evals.compare_reports A.json B.json C.json        # side-by-side table, e.g. models on the same cases
+```
+
+- **Regression gate (CI).** Mock replies are deterministic, so CI runs all three datasets (tuning, holdout,
+  adversarial) and compares them with the committed baselines in `evals/baselines/`. Any quality metric that moves
+  in its bad direction fails the build; latency and token figures are reported but never fail it. Comparing reports
+  of different datasets is refused. A deliberate check: removing `trace_code_consistency` from the blocking checks
+  made the gate report four regressions on the adversarial set (abstention recall 0.33 -> 0.00, unsupported
+  acceptance 0.00 -> 0.33, ...). Baselines are updated only by committing a new mock report on purpose.
+- **Adversarial set** (`rca-adversarial-v1`, 8 cases, `build_rca_adversarial.py`): a reported line that is not
+  the failing one, a patch whose headers name a file outside the trace, log text claiming the gate already passed
+  and asking for automatic approval, a quote of source code that was never retrieved, deploy drift, contradicting
+  history, a trace cut off before any application frame, and one **documented blind spot**: a well-grounded but
+  wrong diagnosis copied from misleading history. In mock mode the gate rejects every bait on the first attempt
+  with named failed checks, and `unsupported_acceptance_rate` is 0/3; the blind-spot case **is accepted** (it is
+  why `false_acceptance_rate` is 1/5 on this set) - the gate verifies grounding, not correctness. The adversarial
+  set has not yet been run against a live model.
+- **`unsupported_acceptance_rate`** = accepted analyses among those that are inconclusive-labelled or contain an
+  unverifiable quote / such analyses.
+- **Calibration.** Each report contains bins (accuracy per confidence range) and a Brier score for the model's
+  `self_assessed_confidence` and for the gate's `quality_score`. Neither is a probability: the quality score is a
+  rubric, and the self-assessment is uncalibrated text from the model. In mock mode both numbers describe the
+  scripted replies, not a model. There is no abstain-by-confidence policy; abstention is decided by evidence checks,
+  because a policy fitted to a few dozen cases would not be trustworthy.
+- **Per-attempt trace.** Every attempt records latency, tokens, schema error fields, gate score, failed checks
+  and the decision taken; the review console shows it as an *Attempts* table.
+
 ### Live results (`openai/gpt-oss-120b` on Groq, 2026-10-09)
 
 Two full runs on the same 26 cases; reports in [`evals/results/`](evals/results). In the second run Groq's
@@ -541,8 +573,8 @@ translation, listing/pagination, Prometheus labels, and the console's CSP and ab
 `.github/workflows/ci.yml` (no secrets, `contents: read`) has four jobs:
 
 - **python-versions** - the unit tests on Python 3.12 and 3.13 (the image uses 3.11);
-- **quality** - ruff, format check, mypy, import smoke test, unit tests with coverage, mock evaluation with
-  regression thresholds, retrieval evaluation (fails on any cross-repository leak) and the sandboxed demo;
+- **quality** - ruff, format check, mypy, import smoke test, unit tests with coverage, mock evaluation of three
+  datasets against committed baselines (fails on any quality regression), retrieval evaluation (fails on any cross-repository leak) and the sandboxed demo;
 - **postgres** - Alembic upgrade/downgrade/upgrade round trip, `alembic check` (models == migrated schema) and
   the unit tests against a PostgreSQL 16 service container;
 - **docker** - validates the Compose file and the Prometheus alert rules, builds the image, and runs an
