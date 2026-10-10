@@ -21,19 +21,64 @@ IncidentStatus = Literal[
 ]
 
 
+class AskTurn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    content: str = Field(..., min_length=1, max_length=1500)
+
+
 class AskRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     question: str = Field(..., min_length=3, max_length=500, description="A question about this incident's record")
+    history: list[AskTurn] = Field(
+        default_factory=list,
+        max_length=6,
+        description="Earlier turns of the conversation (client-held, untrusted); only used to resolve references",
+    )
 
 
 class AskResponse(BaseModel):
     answer: str
+    source: Literal["rules", "model"] = Field(
+        description="`rules`: deterministic answer from the record (no LLM); `model`: generated, then validated"
+    )
+    degraded: bool = Field(description="True when the LLM was unavailable and deterministic guidance was returned")
     answerable: bool = Field(description="False when the incident record does not contain the answer")
-    grounded: bool = Field(description="False when the model cited no section of the record for its answer")
+    grounded: bool = Field(
+        description="False when the model cited no section of the record, or quoted text that is not in it"
+    )
     cited_sections: list[str] = Field(description="Sections of the record the answer is based on")
+    unverified_quotes: list[str] = Field(description="Quoted spans of the answer not found verbatim in the record")
+    follow_ups: list[str] = Field(description="Suggested next questions")
     model: str
     disclaimer: str
+
+
+class GuidanceStep(BaseModel):
+    kind: Literal["action", "check", "wait"]
+    audience: str = Field(description="Who this is for: reviewer, operator or developer")
+    text: str
+
+
+class GuidanceCheck(BaseModel):
+    name: str
+    blocking: bool
+    fraction: float
+    meaning: str
+    advice: str
+    detail: str
+
+
+class GuidanceResponse(BaseModel):
+    state: Literal["ok", "attention", "blocked", "waiting"]
+    headline: str
+    explanation: str
+    next_steps: list[GuidanceStep]
+    failed_checks: list[GuidanceCheck]
+    facts: list[str]
+    patch: dict[str, Any] | None = Field(None, description="Counts derived from the stored diff, if one exists")
 
 
 class AlertOutcome(BaseModel):

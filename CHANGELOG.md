@@ -11,9 +11,14 @@ All notable changes are listed here. Versions of behaviour-critical components a
   Motivated by `ho-off-by-one` (right diagnosis, three diffs that never applied). Not yet measured live.
 
 ### Added
-- `POST /incidents/{id}/ask` and a console card: grounded, stateless, read-only question answering over one
-  incident's stored record (cited sections, `grounded` / `answerable` flags, per-identity rate limit,
-  `ASK_ENABLED`). Answer quality is not evaluated beyond unit tests.
+- `GET /incidents/{id}/guidance` and a "What to do now" card: deterministic state, reason, next steps and
+  per-check advice from the stored record and the runbook (no LLM; complete for every gate check and error category,
+  enforced by a test).
+- `POST /incidents/{id}/ask` and a console card: grounded, read-only question answering over one incident's record.
+  Rules layer (instant, Turkish and English) -> model layer (cited sections, backtick quotes verified against the
+  record, follow-up suggestions, client-held bounded history) -> degraded deterministic answer when the model is
+  unavailable. `source`, `degraded`, `grounded`, `unverified_quotes` flags; per-identity rate limit; `ASK_ENABLED`;
+  metric `opspulse_ask_total`. Model answer quality is not evaluated beyond unit tests.
 - Held-out evaluation, second live session (prompt v5, gate v6): 3 more cases; no false acceptance, one case
   with a correct diagnosis but a patch that never applied. Reports in `evals/results/`.
 - `docs/API.md`: API reference generated from the OpenAPI schema (`python -m scripts.export_api_docs`);

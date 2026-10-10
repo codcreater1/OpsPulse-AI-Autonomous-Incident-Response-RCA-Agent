@@ -90,4 +90,5 @@ def test_console_ask_panel_is_wired_and_uses_only_text_nodes():
     assert 'id="ask-form"' in html and 'id="ask-log"' in html
     js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
     assert "/ask`" in js and "result.answer" in js
-    assert "answer.textContent = result.answer" in js  # model output is rendered as text, never as markup
+    assert "node.textContent = result.answer" in js  # model output is rendered as text, never as markup
+    assert "/guidance`" in js and "plainMarkup" in js

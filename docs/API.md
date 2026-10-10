@@ -103,9 +103,11 @@ Re-queue a `failed` incident (roles: reviewer, admin), e.g. after a provider quo
 
 Ask a question about one incident (roles: reporter, reviewer, admin).
 
-The answer is generated from the incident's stored record only, is stateless (no conversation memory), triggers
-no action, and names the sections it used. `grounded=false` means the model cited nothing from the record -
-treat such an answer with suspicion. It was not executed or verified.
+Common questions (why not accepted, what to do next, what the patch changes) are answered by rules from the
+record without an LLM (`source=rules`); others go to the model, which must cite the record sections it used and
+whose quoted text is verified against the record. If the model is unavailable the deterministic guidance is
+returned (`degraded=true`). The server keeps no conversation state; `history` is client-held and untrusted. No
+answer triggers an action, and none was executed or verified.
 
 **Auth:** API key or Bearer token
 
@@ -118,6 +120,7 @@ treat such an answer with suspicion. It was not executed or verified.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `question` | string | yes | A question about this incident's record |
+| `history` | list of AskTurn |  | Earlier turns of the conversation (client-held, untrusted); only used to resolve references |
 
 | Status | Meaning |
 |---|---|
@@ -129,6 +132,26 @@ treat such an answer with suspicion. It was not executed or verified.
 | 429 | Question rate limit exceeded (see Retry-After) |
 | 502 | The LLM provider could not answer |
 | 504 | The LLM provider timed out |
+| 422 | Validation Error |
+
+### `GET /incidents/{incident_id}/guidance`
+
+What state the incident is in, why, and what a person can do next - derived deterministically from the
+stored record and the runbook (no LLM, always available). Never claims a fix is correct.
+
+**Auth:** API key or Bearer token
+
+| Parameter | In | Type | Required | Description |
+|---|---|---|---|---|
+| `incident_id` | path | string | yes |  |
+
+| Status | Meaning |
+|---|---|
+| 200 | Successful Response |
+| 401 | Missing or invalid API key |
+| 403 | Role not allowed, repository not allowed, or self-approval |
+| 503 | Database unavailable or authentication not configured |
+| 404 | Not Found |
 | 422 | Validation Error |
 
 ## Remediation decisions

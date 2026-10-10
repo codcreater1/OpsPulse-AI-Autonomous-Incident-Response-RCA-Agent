@@ -30,6 +30,7 @@ JOBS_DEFERRED = Counter(
     "opspulse_jobs_deferred_total", "Incidents re-queued with backoff after a transient error", ["error_category"]
 )
 NOTIFICATIONS = Counter("opspulse_notifications_total", "Reviewer notifications", ["outcome"])
+ASK = Counter("opspulse_ask_total", "Questions about incidents", ["source", "outcome"])
 DECISIONS = Counter("opspulse_remediation_decisions_total", "Human remediation decisions", ["decision"])
 
 

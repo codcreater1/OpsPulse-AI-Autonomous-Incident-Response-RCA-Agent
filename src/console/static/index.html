@@ -117,6 +117,19 @@
         <div><dt>Versions</dt><dd id="d-versions" class="mono small"></dd></div>
       </dl>
 
+      <article id="guide" class="card guide" hidden aria-labelledby="guide-title">
+        <div class="section-head">
+          <h2 id="guide-title">What to do now</h2>
+          <span id="guide-state" class="badge"></span>
+        </div>
+        <p id="guide-headline" class="guide-headline"></p>
+        <p id="guide-explanation" class="muted"></p>
+        <ol id="guide-steps" class="guide-steps"></ol>
+        <ul id="guide-facts" class="plain small muted"></ul>
+        <p class="muted small">Derived from the stored record and the runbook, without a language model.
+          It never claims a fix is correct.</p>
+      </article>
+
       <button type="button" id="retry" class="btn" hidden>Retry analysis</button>
 
       <div class="grid">
@@ -163,11 +176,14 @@
       <article id="ask" class="card ask" aria-labelledby="ask-title">
         <div class="section-head">
           <h2 id="ask-title">Ask about this incident</h2>
-          <span class="chip">grounded &middot; read-only</span>
+          <div class="btn-row">
+            <span class="chip">grounded &middot; read-only</span>
+            <button type="button" id="ask-clear" class="btn ghost tiny" hidden>Clear conversation</button>
+          </div>
         </div>
-        <p class="muted small">Answers come only from this incident's stored record, name the sections they used and
-          are not executed or verified. Each question stands alone (no memory), and it can never approve or change
-          anything.</p>
+        <p class="muted small">Common questions are answered instantly from the record without a model; others go to
+          the model, which must cite the record, and its quotes are checked. Nothing here is executed or verified, and
+          it can never approve or change anything. Follow-up questions use this page's conversation only.</p>
         <div id="ask-chips" class="chips"></div>
         <form id="ask-form" class="ask-form" autocomplete="off">
           <label for="ask-input" class="sr-only">Question</label>

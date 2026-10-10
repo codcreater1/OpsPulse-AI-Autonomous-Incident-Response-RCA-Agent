@@ -16,6 +16,7 @@ from src.api.schemas import (
     AskRequest,
     AskResponse,
     ErrorResponse,
+    GuidanceResponse,
     HealthResponse,
     IncidentAccepted,
     IncidentPage,
@@ -28,7 +29,7 @@ from src.api.schemas import (
 from src.config import settings
 from src.db.client import ping_database
 from src.db.repositories import InvalidCursorError
-from src.services import ask_service, incident_service
+from src.services import ask_service, guidance, incident_service
 from src.services.incident_service import DatabaseUnavailableError, IncidentConflictError, IncidentNotFoundError
 from src.services.remediation_service import ApprovalError
 
@@ -230,14 +231,16 @@ def ask_about_incident(
 ) -> AskResponse:
     """Ask a question about one incident (roles: reporter, reviewer, admin).
 
-    The answer is generated from the incident's stored record only, is stateless (no conversation memory), triggers
-    no action, and names the sections it used. `grounded=false` means the model cited nothing from the record -
-    treat such an answer with suspicion. It was not executed or verified.
+    Common questions (why not accepted, what to do next, what the patch changes) are answered by rules from the
+    record without an LLM (`source=rules`); others go to the model, which must cite the record sections it used and
+    whose quoted text is verified against the record. If the model is unavailable the deterministic guidance is
+    returned (`degraded=true`). The server keeps no conversation state; `history` is client-held and untrusted. No
+    answer triggers an action, and none was executed or verified.
     """
     if not settings.ask_enabled:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "question answering is disabled")
     try:
-        result = ask_service.ask(incident_id, body.question)
+        result = ask_service.ask(incident_id, body.question, [turn.model_dump() for turn in body.history])
     except IncidentNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "incident not found") from exc
     except DatabaseUnavailableError as exc:
@@ -246,3 +249,22 @@ def ask_about_incident(
         raise HTTPException(exc.status, str(exc)) from exc
     logger.info("question answered for %s by %s", incident_id, principal.name)
     return AskResponse(**result)
+
+
+@router.get(
+    "/incidents/{incident_id}/guidance",
+    response_model=GuidanceResponse,
+    dependencies=[Depends(authenticate)],
+    tags=["incidents"],
+    responses={**_ERRORS, 404: {"model": ErrorResponse}},
+)
+def incident_guidance(incident_id: uuid.UUID) -> GuidanceResponse:
+    """What state the incident is in, why, and what a person can do next - derived deterministically from the
+    stored record and the runbook (no LLM, always available). Never claims a fix is correct."""
+    try:
+        row = incident_service.get_incident_with_approval(incident_id)
+    except DatabaseUnavailableError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "database unavailable") from exc
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "incident not found")
+    return GuidanceResponse(**guidance.build_guidance(row))

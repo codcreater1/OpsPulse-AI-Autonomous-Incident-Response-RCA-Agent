@@ -16,7 +16,7 @@ const STATUS_TONE = {
 
 const $ = (id) => document.getElementById(id);
 const state = {
-  askFor: null, cursor: null, items: [], current: null, evidenceFilter: "all", loading: false, focusIndex: -1, memoryKey: "",
+  askFor: null, askHistory: [], cursor: null, items: [], current: null, evidenceFilter: "all", loading: false, focusIndex: -1, memoryKey: "",
 };
 
 // ------------------------------------------------------------------ small helpers
@@ -365,6 +365,7 @@ function renderDetail(incident) {
 
   $("retry").hidden = incident.status !== "failed";
   renderAsk(incident);
+  loadGuidance(incident);
   const pending = incident.pending_approval;
   $("approval").hidden = !pending;
   if (pending) $("a-sha").textContent = pending.patch_sha256;
@@ -497,39 +498,111 @@ function renderDiff(patch) {
   }
 }
 
+// ------------------------------------------------------------------ guidance (what to do now)
+
+function plainMarkup(text) {
+  return String(text || "").replaceAll("**", "").replaceAll("`", "");
+}
+
+async function loadGuidance(incident) {
+  try {
+    const guide = await api(`/incidents/${encodeURIComponent(incident.incident_id)}/guidance`);
+    if (!state.current || state.current.incident_id !== incident.incident_id) return;
+    renderGuidance(guide);
+  } catch {
+    $("guide").hidden = true; // guidance is an extra; the page works without it
+  }
+}
+
+function renderGuidance(guide) {
+  const card = $("guide");
+  card.hidden = false;
+  card.className = `card guide guide-${guide.state}`;
+  const tone = { ok: "s-ok", attention: "s-warn", blocked: "s-bad", waiting: "s-neutral" }[guide.state];
+  $("guide-state").className = `badge ${tone || "s-neutral"}`;
+  $("guide-state").textContent = humanize(guide.state);
+  $("guide-headline").textContent = guide.headline;
+  $("guide-explanation").textContent = guide.explanation;
+  const steps = $("guide-steps");
+  steps.replaceChildren();
+  for (const step of guide.next_steps || []) {
+    const li = el("li");
+    li.append(el("span", step.audience, "chip"), el("span", plainMarkup(step.text)));
+    steps.append(li);
+  }
+  if (!steps.children.length) steps.append(el("li", "No action is needed right now.", "muted"));
+  const facts = $("guide-facts");
+  facts.replaceChildren();
+  for (const fact of guide.facts || []) facts.append(el("li", fact));
+}
+
 // ------------------------------------------------------------------ ask about this incident
 
 function suggestedQuestions(incident) {
   const analysis = incident.analysis || {};
-  const accepted = incident.status === "analysis_ready" || incident.status === "awaiting_approval"
-    || incident.status === "pr_created";
+  const accepted = ["analysis_ready", "awaiting_approval", "pr_created"].includes(incident.status);
   const questions = [accepted ? "Why did the quality gate accept this analysis?"
     : "Why was this analysis not accepted by the gate?"];
-  questions.push("What should I check first before trusting this diagnosis?");
-  questions.push("How could this diagnosis be wrong?");
+  questions.push("What should I do next?");
   if (incident.suggested_patch) questions.push("Explain what the patch changes and what it does not prove.");
+  questions.push("How could this diagnosis be wrong?");
   if ((analysis.uncertainties || []).length) questions.push("Which uncertainties matter most?");
   return questions;
+}
+
+function renderChips(container, questions) {
+  container.replaceChildren();
+  for (const question of questions) {
+    const button = el("button", question, "chip-btn");
+    button.type = "button";
+    button.addEventListener("click", () => ask(question));
+    container.append(button);
+  }
 }
 
 function renderAsk(incident) {
   if (state.askFor === incident.incident_id) return; // keep the transcript while the incident is re-rendered
   state.askFor = incident.incident_id;
+  state.askHistory = [];
   $("ask-log").replaceChildren();
-  const chips = $("ask-chips");
-  chips.replaceChildren();
-  for (const question of suggestedQuestions(incident)) {
-    const button = el("button", question, "chip-btn");
-    button.type = "button";
-    button.addEventListener("click", () => ask(question));
-    chips.append(button);
-  }
+  $("ask-clear").hidden = true;
+  renderChips($("ask-chips"), suggestedQuestions(incident));
 }
 
 function setAskBusy(busy) {
   $("ask-send").disabled = busy;
   $("ask-input").disabled = busy;
-  document.querySelectorAll("#ask-chips .chip-btn").forEach((b) => { b.disabled = busy; });
+  document.querySelectorAll("#ask-chips .chip-btn, .ask-followups .chip-btn").forEach((b) => { b.disabled = busy; });
+}
+
+function renderAnswer(node, result) {
+  node.className = "ask-item ask-a";
+  node.textContent = result.answer;
+  const meta = el("div", null, "ask-meta");
+  meta.append(el("span", result.source === "rules" ? "instant · from the record" : "model", `chip src-${result.source}`));
+  if (result.degraded) meta.append(el("span", "model unavailable", "chip warn"));
+  if (!result.answerable) meta.append(el("span", "not in the record", "chip warn"));
+  else if (result.unverified_quotes && result.unverified_quotes.length) {
+    meta.append(el("span", "quoted text not found in the record", "chip bad"));
+  } else if (!result.grounded) meta.append(el("span", "cites nothing - treat with caution", "chip bad"));
+  for (const name of result.cited_sections || []) meta.append(el("span", name, "chip src"));
+  meta.append(el("span", result.source === "model" ? `${result.model} · not executed or verified`
+    : "not executed or verified", "muted"));
+  node.append(meta);
+  for (const quote of result.unverified_quotes || []) {
+    node.append(el("div", `Not in the record: ${quote}`, "ask-meta muted"));
+  }
+  const actions = el("div", null, "ask-actions");
+  const copy = el("button", "Copy answer", "btn ghost tiny");
+  copy.type = "button";
+  copy.addEventListener("click", () => copyText(result.answer, "Answer"));
+  actions.append(copy);
+  node.append(actions);
+  if ((result.follow_ups || []).length) {
+    const follow = el("div", null, "ask-followups");
+    renderChips(follow, result.follow_ups);
+    node.append(follow);
+  }
 }
 
 async function ask(question) {
@@ -540,29 +613,33 @@ async function ask(question) {
   log.append(el("li", text, "ask-item ask-q"));
   const answer = el("li", "Reading the incident record…", "ask-item ask-a pending");
   log.append(answer);
+  $("ask-clear").hidden = false;
   setAskBusy(true);
   try {
     const result = await api(`/incidents/${encodeURIComponent(incident.incident_id)}/ask`, {
-      method: "POST", body: JSON.stringify({ question: text }),
+      method: "POST", body: JSON.stringify({ question: text, history: state.askHistory.slice(-6) }),
     });
-    answer.className = "ask-item ask-a";
-    answer.textContent = result.answer;
-    const meta = el("div", null, "ask-meta");
-    if (!result.answerable) meta.append(el("span", "not in the record", "chip warn"));
-    else if (!result.grounded) meta.append(el("span", "cites nothing - treat with caution", "chip bad"));
-    for (const name of result.cited_sections || []) meta.append(el("span", name, "chip src"));
-    meta.append(el("span", `${result.model} · not executed or verified`, "muted"));
-    answer.append(meta);
+    renderAnswer(answer, result);
+    state.askHistory.push({ role: "user", content: text.slice(0, 1500) },
+      { role: "assistant", content: String(result.answer).slice(0, 1500) });
+    state.askHistory = state.askHistory.slice(-6);
     $("ask-input").value = "";
   } catch (error) {
     answer.className = "ask-item ask-a error";
     answer.textContent = error.status === 429 ? "Too many questions - wait a moment and try again."
-      : error.status === 503 ? "Questions are unavailable: the LLM is not configured or the database is down."
+      : error.status === 404 ? "Questions are switched off on this server."
       : error.message;
   } finally {
     setAskBusy(false);
     answer.scrollIntoView({ block: "nearest" });
   }
+}
+
+function clearConversation() {
+  state.askHistory = [];
+  $("ask-log").replaceChildren();
+  $("ask-clear").hidden = true;
+  $("ask-input").focus();
 }
 
 // ------------------------------------------------------------------ actions
@@ -702,6 +779,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("approve").addEventListener("click", () => decide("approve"));
   $("reject").addEventListener("click", () => decide("reject"));
   $("retry").addEventListener("click", retry);
+  $("ask-clear").addEventListener("click", clearConversation);
   $("ask-form").addEventListener("submit", (event) => {
     event.preventDefault();
     ask($("ask-input").value);
