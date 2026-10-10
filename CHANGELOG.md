@@ -5,6 +5,12 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Changed
+- Review console redesign: deep links and back/forward navigation, search, auto-refresh, keyboard shortcuts,
+  gate-check meters (failures first), attempt timeline, patch view with line numbers, copy/download, confirmation
+  dialog with the approval-bound SHA-256, theme switch, mobile layout, toasts, empty and loading states. Same CSP
+  (no inline script or style, `textContent` only).
+
 ## [1.2.0] - 2026-10-10
 
 ### Added

@@ -511,13 +511,24 @@ counted (`opspulse_notifications_total`) and never affect incident processing.
 
 ## Review console
 
-`GET /console` serves a small dependency-free web UI for reviewers: filter incidents (default: awaiting
+`GET /console` serves a dependency-free web UI for reviewers: filter and search incidents (default: awaiting
 approval), open one to see the model's hypothesis, its evidence labelled *observed / inference / hypothesis*
-with the verified quotes, uncertainties, suggested tests, the quality-gate breakdown (blocking checks marked
-`*`) and the coloured patch, then approve or reject. It uses the same API and the same rules (roles,
-four-eyes, patch hash) - it has no privileges of its own.
+with the verified quotes, uncertainties, suggested tests, the quality-gate breakdown, the attempt timeline and the
+patch, then approve or reject. It uses the same API and the same rules (roles, four-eyes, patch hash) - it has no
+privileges of its own.
 
-![Evidence view in the review console (demo data)](docs/images/console-evidence.jpg)
+- **Navigation:** every incident has a deep link (`#/incident/<id>`, works with back/forward and in a new tab);
+  search across loaded incidents, optional auto-refresh (15 s), keyboard shortcuts (`/` search, `j`/`k` move,
+  `Enter` open, `r` refresh, `Esc` back).
+- **Gate breakdown:** one meter per check, failing checks first, blocking checks labelled, with the check's own
+  explanation; the attempt timeline shows each attempt's gate verdict, failed checks, decision, tokens and latency.
+- **Patch:** line numbers from the hunk headers, add/remove colouring, copy and `.patch` download.
+- **Decision:** approving asks for confirmation in a dialog that shows the repository, file and the SHA-256 the
+  approval is bound to. The model's own confidence is shown labelled *uncalibrated*, separate from the gate score.
+- **Accessibility and comfort:** light/dark/auto theme, keyboard-reachable rows (real links), live regions for
+  status messages, reduced-motion support, responsive layout down to phone width (tables become cards), print styles.
+
+![Evidence view in the review console (demo data, earlier design)](docs/images/console-evidence.jpg)
 
 - The API key is kept only in the tab's `sessionStorage`.
 - All API data (which includes LLM output and log text) is rendered with `textContent`; there is no

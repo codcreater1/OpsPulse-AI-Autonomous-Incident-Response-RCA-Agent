@@ -3,107 +3,201 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>OpsPulse Console</title>
   <link rel="stylesheet" href="/console/static/styles.css">
   <script src="/console/static/app.js" defer></script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
   <header class="topbar">
-    <div class="brand"><span class="logo" aria-hidden="true"></span>OpsPulse <span class="muted">review console</span></div>
-    <form id="key-form" class="key-form" autocomplete="off">
-      <label for="api-key" class="sr-only">API key</label>
-      <input id="api-key" type="password" placeholder="API key (kept in this tab only)" required>
-      <button type="submit">Connect</button>
-      <button type="button" id="forget-key" class="ghost" hidden>Forget key</button>
-    </form>
+    <a class="brand" href="#/" aria-label="OpsPulse, all incidents">
+      <span class="logo" aria-hidden="true"></span>
+      <span>OpsPulse</span><span class="muted brand-sub">review console</span>
+    </a>
+    <div class="topbar-right">
+      <span id="conn" class="conn conn-off" role="status">Not connected</span>
+      <form id="key-form" class="key-form" autocomplete="off">
+        <label for="api-key" class="sr-only">API key</label>
+        <input id="api-key" type="password" placeholder="API key (kept in this tab only)" required>
+        <button type="submit" class="btn primary">Connect</button>
+        <button type="button" id="forget-key" class="btn ghost" hidden>Forget key</button>
+      </form>
+      <button type="button" id="theme" class="btn ghost icon-btn" aria-label="Colour theme: automatic" title="Colour theme"></button>
+    </div>
   </header>
 
-  <main>
-    <section id="list-view" class="panel">
-      <div class="panel-head">
-        <h1>Incidents</h1>
-        <div class="filters">
-          <label for="status-filter">Status</label>
-          <select id="status-filter">
-            <option value="awaiting_approval">awaiting approval</option>
-            <option value="">all</option>
-            <option value="needs_review">needs review</option>
-            <option value="analysis_ready">analysis ready</option>
-            <option value="pr_created">PR created</option>
-            <option value="remediation_rejected">rejected</option>
-            <option value="failed">failed</option>
-            <option value="queued">queued</option>
-            <option value="processing">processing</option>
-          </select>
-          <button type="button" id="refresh" class="ghost">Refresh</button>
+  <main id="main" tabindex="-1">
+    <section id="list-view" aria-labelledby="list-title">
+      <div class="view-head">
+        <div>
+          <h1 id="list-title">Incidents</h1>
+          <p id="list-summary" class="muted small"></p>
+        </div>
+        <div class="toolbar">
+          <label class="field">
+            <span class="sr-only">Search loaded incidents</span>
+            <input id="search" type="search" placeholder="Search repository, file, submitter ( / )" autocomplete="off">
+          </label>
+          <label class="field">
+            <span class="sr-only">Status</span>
+            <select id="status-filter">
+              <option value="awaiting_approval">Awaiting approval</option>
+              <option value="">All statuses</option>
+              <option value="needs_review">Needs review</option>
+              <option value="analysis_ready">Analysis ready</option>
+              <option value="pr_created">PR created</option>
+              <option value="remediation_rejected">Rejected</option>
+              <option value="failed">Failed</option>
+              <option value="queued">Queued</option>
+              <option value="processing">Processing</option>
+            </select>
+          </label>
+          <label class="check"><input id="auto-refresh" type="checkbox"> Auto-refresh</label>
+          <button type="button" id="refresh" class="btn ghost" title="Refresh (r)">Refresh</button>
         </div>
       </div>
+
       <p id="list-message" class="message" role="status"></p>
-      <table id="incident-table" hidden>
-        <thead>
-          <tr><th>Status</th><th>Repository</th><th>Affected file</th><th>Score</th><th>Attempts</th><th>Submitted</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <button type="button" id="load-more" class="ghost" hidden>Load older</button>
+
+      <div id="list-card" class="card flush" hidden>
+        <table id="incident-table" class="incidents">
+          <thead>
+            <tr>
+              <th scope="col">Status</th>
+              <th scope="col">Repository</th>
+              <th scope="col">Gate score</th>
+              <th scope="col" class="num">Attempts</th>
+              <th scope="col">Submitted</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div id="empty" class="empty" hidden>
+        <p class="empty-title" id="empty-title">No incidents match this filter</p>
+        <p class="muted" id="empty-text">Incidents appear here after an application, Sentry or Alertmanager reports a crash.</p>
+      </div>
+
+      <div class="list-foot">
+        <button type="button" id="load-more" class="btn ghost" hidden>Load older</button>
+        <p class="muted small keys">Shortcuts: <kbd>/</kbd> search · <kbd>j</kbd><kbd>k</kbd> move · <kbd>Enter</kbd> open · <kbd>r</kbd> refresh · <kbd>Esc</kbd> back</p>
+      </div>
     </section>
 
-    <section id="detail-view" class="panel" hidden>
-      <button type="button" id="back" class="ghost">&larr; All incidents</button>
+    <section id="detail-view" aria-labelledby="d-title" hidden>
+      <a href="#/" id="back" class="back">&larr; All incidents</a>
+
       <div class="detail-head">
-        <h1 id="d-title"></h1>
-        <span id="d-status" class="badge"></span>
+        <div class="detail-title">
+          <h1 id="d-title"></h1>
+          <div class="detail-sub">
+            <span id="d-status" class="badge"></span>
+            <span id="d-severity" class="chip" hidden></span>
+            <code id="d-id" class="mono id"></code>
+            <button type="button" id="copy-id" class="btn ghost tiny">Copy id</button>
+            <a id="d-pr" class="btn ghost tiny" href="#/" target="_blank" rel="noopener noreferrer" hidden>Open pull request</a>
+          </div>
+        </div>
       </div>
-      <dl class="facts">
-        <div><dt>Incident</dt><dd id="d-id" class="mono"></dd></div>
+
+      <p id="d-reason" class="banner" hidden></p>
+      <p id="a-message" class="message" role="status"></p>
+
+      <dl class="facts card">
         <div><dt>Repository</dt><dd id="d-repo"></dd></div>
         <div><dt>Affected file</dt><dd id="d-file" class="mono"></dd></div>
         <div><dt>Category</dt><dd id="d-category"></dd></div>
-        <div><dt>Quality score</dt><dd id="d-score" title="Deterministic rubric score, not a probability"></dd></div>
+        <div><dt>Gate score</dt><dd id="d-score" title="Deterministic rubric score, not a probability of being correct"></dd></div>
+        <div><dt>Model confidence</dt><dd id="d-confidence" title="The model's own estimate. Uncalibrated."></dd></div>
         <div><dt>Submitted by</dt><dd id="d-submitter"></dd></div>
         <div><dt>LLM usage</dt><dd id="d-usage" title="Provider-reported tokens across all attempts"></dd></div>
+        <div><dt>Versions</dt><dd id="d-versions" class="mono small"></dd></div>
       </dl>
-      <p id="d-reason" class="message"></p>
-      <p id="a-message" class="message" role="status"></p>
-      <button type="button" id="retry" class="ghost" hidden>Retry analysis</button>
+
+      <button type="button" id="retry" class="btn" hidden>Retry analysis</button>
 
       <div class="grid">
         <article class="card">
           <h2>Root cause <span class="muted">(model hypothesis)</span></h2>
-          <p id="d-root"></p>
-          <h3>Evidence</h3>
+          <p id="d-root" class="prose"></p>
+          <div class="section-head">
+            <h3>Evidence</h3>
+            <div class="seg" role="group" aria-label="Filter evidence">
+              <button type="button" class="seg-btn" data-kind="all" aria-pressed="true">All</button>
+              <button type="button" class="seg-btn" data-kind="observed" aria-pressed="false">Observed</button>
+              <button type="button" class="seg-btn" data-kind="unverified" aria-pressed="false">Inferred</button>
+            </div>
+          </div>
           <ul id="d-evidence" class="evidence"></ul>
           <h3>Uncertainties</h3>
-          <ul id="d-uncertainties"></ul>
+          <ul id="d-uncertainties" class="plain"></ul>
           <h3>Suggested tests <span class="muted">(not run)</span></h3>
-          <ul id="d-tests"></ul>
+          <ul id="d-tests" class="plain"></ul>
         </article>
+
         <article class="card">
-          <h2>Quality gate</h2>
-          <table class="checks"><thead><tr><th>Check</th><th>Score</th><th>Detail</th></tr></thead><tbody id="d-checks"></tbody></table>
+          <div class="section-head">
+            <h2>Quality gate</h2>
+            <span id="d-gate" class="badge"></span>
+          </div>
+          <ul id="d-checks" class="checks"></ul>
           <h3>Attempts</h3>
-          <table class="checks"><thead><tr><th>#</th><th>Gate</th><th>Failed checks</th><th>Decision</th><th>LLM</th></tr></thead><tbody id="d-attempts"></tbody></table>
+          <ol id="d-attempts" class="timeline"></ol>
         </article>
       </div>
 
       <article class="card">
-        <h2>Proposed patch</h2>
-        <pre id="d-patch" class="diff"></pre>
+        <div class="section-head">
+          <h2>Proposed patch</h2>
+          <div class="btn-row">
+            <button type="button" id="copy-patch" class="btn ghost tiny" hidden>Copy</button>
+            <button type="button" id="download-patch" class="btn ghost tiny" hidden>Download .patch</button>
+          </div>
+        </div>
+        <div id="d-patch" class="diff" role="region" aria-label="Proposed patch" tabindex="0"></div>
       </article>
+
+      <details class="card reported">
+        <summary>Reported error <span class="muted">(untrusted input, shown as plain text)</span></summary>
+        <pre id="d-error" class="raw"></pre>
+      </details>
 
       <article id="approval" class="card approval" hidden>
         <h2>Decision</h2>
         <p class="muted">Approving opens a <strong>draft pull request</strong> for human review. Nothing is merged. You cannot
           decide on incidents you submitted.</p>
-        <p>Patch SHA-256: <code id="a-sha" class="mono"></code></p>
-        <label for="a-note">Note (optional)</label>
+        <p class="small">Patch SHA-256 <code id="a-sha" class="mono"></code></p>
+        <label for="a-note" class="small">Note (optional)</label>
         <textarea id="a-note" maxlength="2000" rows="2"></textarea>
         <div class="actions">
-          <button type="button" id="approve">Approve and open PR</button>
-          <button type="button" id="reject" class="danger">Reject</button>
+          <button type="button" id="approve" class="btn primary">Approve and open draft PR</button>
+          <button type="button" id="reject" class="btn danger">Reject</button>
         </div>
       </article>
     </section>
   </main>
+
+  <dialog id="confirm" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title">Open a draft pull request?</h2>
+      <dl class="confirm-facts">
+        <div><dt>Repository</dt><dd id="c-repo"></dd></div>
+        <div><dt>File</dt><dd id="c-file" class="mono"></dd></div>
+        <div><dt>Patch SHA-256</dt><dd id="c-sha" class="mono"></dd></div>
+        <div><dt>Gate score</dt><dd id="c-score"></dd></div>
+      </dl>
+      <p class="muted small">The approval is bound to exactly this patch. A draft PR is opened; it is never merged
+        automatically.</p>
+      <div class="actions">
+        <button value="cancel" class="btn ghost">Cancel</button>
+        <button value="confirm" class="btn primary" id="confirm-ok">Open draft PR</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
 </body>
 </html>

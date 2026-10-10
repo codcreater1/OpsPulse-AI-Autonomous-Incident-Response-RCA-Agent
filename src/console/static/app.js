@@ -1,8 +1,13 @@
 // OpsPulse review console. Plain DOM APIs only: every value from the API (which includes LLM output and
-// untrusted log text) is rendered with textContent, never innerHTML.
+// untrusted log text) is rendered with textContent, never innerHTML. No inline script or style (strict CSP).
 "use strict";
 
-const KEY_STORAGE = "opspulse.apiKey";
+const KEY_STORAGE = "opspulse.apiKey";      // sessionStorage: dies with the tab
+const THEME_STORAGE = "opspulse.theme";      // localStorage: auto | light | dark
+const REFRESH_STORAGE = "opspulse.autoRefresh";
+const REFRESH_MS = 15000;
+const THEMES = ["auto", "light", "dark"];
+const THEME_GLYPH = { auto: "◐", light: "☀", dark: "☾" };
 const STATUS_TONE = {
   awaiting_approval: "s-warn", needs_review: "s-warn", processing: "s-neutral", analysis_ready: "s-ok",
   pr_created: "s-ok", pr_skipped_duplicate: "s-ok", remediation_rejected: "s-neutral", pr_failed: "s-bad",
@@ -10,35 +15,19 @@ const STATUS_TONE = {
 };
 
 const $ = (id) => document.getElementById(id);
-const state = { cursor: null, current: null };
+const state = {
+  cursor: null, items: [], current: null, evidenceFilter: "all", loading: false, focusIndex: -1, memoryKey: "",
+};
 
-function apiKey() {
-  try { return sessionStorage.getItem(KEY_STORAGE) || ""; } catch { return ""; }
-}
+// ------------------------------------------------------------------ small helpers
 
-function setKey(value) {
+function store(kind, name, value) {
   try {
-    if (value) sessionStorage.setItem(KEY_STORAGE, value); else sessionStorage.removeItem(KEY_STORAGE);
-  } catch { /* storage unavailable: the key lives only in memory for this page */ }
-  memoryKey = value;
-  $("forget-key").hidden = !value;
-}
-let memoryKey = "";
-
-async function api(path, options = {}) {
-  const response = await fetch(path, {
-    ...options,
-    headers: { "X-API-Key": apiKey() || memoryKey, "Content-Type": "application/json", ...(options.headers || {}) },
-  });
-  let body = null;
-  try { body = await response.json(); } catch { body = null; }
-  if (!response.ok) {
-    const message = body && body.error ? body.error.message : `HTTP ${response.status}`;
-    const error = new Error(message);
-    error.status = response.status;
-    throw error;
-  }
-  return body;
+    const area = kind === "session" ? sessionStorage : localStorage;
+    if (value === undefined) return area.getItem(name) || "";
+    if (value) area.setItem(name, value); else area.removeItem(name);
+  } catch { /* storage unavailable (private mode, blocked): the console still works without it */ }
+  return "";
 }
 
 function el(tag, text, className) {
@@ -48,8 +37,47 @@ function el(tag, text, className) {
   return node;
 }
 
+function humanize(value) { return String(value || "").replaceAll("_", " "); }
+
 function badge(status) {
-  return el("span", (status || "").replaceAll("_", " "), `badge ${STATUS_TONE[status] || "s-neutral"}`);
+  return el("span", humanize(status), `badge ${STATUS_TONE[status] || "s-neutral"}`);
+}
+
+function toneForScore(score) {
+  if (score >= 0.85) return "ok";
+  if (score >= 0.5) return "warn";
+  return "bad";
+}
+
+function meter(fraction, tone) {
+  const bar = el("span", null, `bar ${tone}`);
+  const fill = document.createElement("span");
+  fill.style.width = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`; // CSSOM: allowed by the CSP
+  bar.append(fill);
+  return bar;
+}
+
+function ago(iso) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return String(iso);
+  const seconds = (Date.now() - date.getTime()) / 1000;
+  if (seconds < 45) return "just now";
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)} h ago`;
+  if (seconds < 7 * 86400) return `${Math.round(seconds / 86400)} d ago`;
+  return date.toLocaleDateString();
+}
+
+function fullDate(iso) {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? String(iso || "") : date.toLocaleString();
+}
+
+function toast(text, isError = false) {
+  const node = el("div", text, isError ? "toast error" : "toast");
+  $("toasts").append(node);
+  setTimeout(() => node.remove(), isError ? 7000 : 3500);
 }
 
 function setMessage(id, text, isError = false) {
@@ -58,158 +86,224 @@ function setMessage(id, text, isError = false) {
   node.classList.toggle("error", isError);
 }
 
-function when(iso) {
-  if (!iso) return "";
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
+function setConnection(kind, text) {
+  const node = $("conn");
+  node.textContent = text;
+  node.className = `conn conn-${kind}`;
+}
+
+// ------------------------------------------------------------------ API
+
+function apiKey() { return store("session", KEY_STORAGE) || state.memoryKey; }
+
+function setKey(value) {
+  state.memoryKey = value;
+  store("session", KEY_STORAGE, value || null);
+  $("forget-key").hidden = !value;
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    headers: { "X-API-Key": apiKey(), "Content-Type": "application/json", ...(options.headers || {}) },
+  });
+  let body = null;
+  try { body = await response.json(); } catch { body = null; }
+  if (!response.ok) {
+    const error = new Error(body && body.error ? body.error.message : `HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  return body;
+}
+
+function failure(error, messageId) {
+  if (error.status === 401) {
+    setConnection("bad", "Invalid key");
+    setMessage(messageId, "Enter a valid API key to continue.", true);
+  } else if (error.status === 403) {
+    setMessage(messageId, "This key may not perform that action.", true);
+  } else {
+    setConnection("bad", "Error");
+    setMessage(messageId, error.message, true);
+  }
+}
+
+// ------------------------------------------------------------------ theme
+
+function applyTheme(mode) {
+  const root = document.documentElement;
+  if (mode === "light" || mode === "dark") root.dataset.theme = mode; else delete root.dataset.theme;
+  const button = $("theme");
+  button.textContent = THEME_GLYPH[mode] || THEME_GLYPH.auto;
+  button.setAttribute("aria-label", `Colour theme: ${mode === "auto" ? "automatic" : mode}`);
+  button.title = `Colour theme: ${mode === "auto" ? "automatic" : mode} (click to change)`;
+}
+
+function cycleTheme() {
+  const current = store("local", THEME_STORAGE) || "auto";
+  const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length];
+  store("local", THEME_STORAGE, next === "auto" ? null : next);
+  applyTheme(next);
 }
 
 // ------------------------------------------------------------------ list
 
+function visibleItems() {
+  const query = $("search").value.trim().toLowerCase();
+  if (!query) return state.items;
+  return state.items.filter((item) => [item.repo_name, item.affected_file, item.submitted_by, item.status,
+    item.incident_id, item.error_category].some((value) => String(value || "").toLowerCase().includes(query)));
+}
+
+function skeletonRows() {
+  const body = $("incident-table").querySelector("tbody");
+  body.replaceChildren();
+  for (let i = 0; i < 5; i += 1) {
+    const row = document.createElement("tr");
+    row.className = "skeleton";
+    for (let c = 0; c < 5; c += 1) {
+      const cell = document.createElement("td");
+      cell.append(document.createElement("span"));
+      row.append(cell);
+    }
+    body.append(row);
+  }
+  $("list-card").hidden = false;
+  $("empty").hidden = true;
+}
+
 async function loadList(append = false) {
-  if (!append) state.cursor = null;
+  if (state.loading) return;
+  state.loading = true;
   const params = new URLSearchParams({ limit: "20" });
   const status = $("status-filter").value;
   if (status) params.set("status", status);
   if (append && state.cursor) params.set("cursor", state.cursor);
-  setMessage("list-message", "Loading…");
+  if (!append && state.items.length === 0) skeletonRows();
+  setMessage("list-message", "");
   try {
     const page = await api(`/incidents?${params}`);
-    renderRows(page.items, append);
+    state.items = append ? state.items.concat(page.items) : page.items;
     state.cursor = page.next_cursor;
     $("load-more").hidden = !page.next_cursor;
-    const count = $("incident-table").querySelectorAll("tbody tr").length;
-    setMessage("list-message", count ? "" : "No incidents match this filter.");
+    setConnection("on", "Connected");
+    renderRows();
   } catch (error) {
-    $("incident-table").hidden = true;
-    setMessage("list-message", error.status === 401 ? "Enter a valid API key to continue." : error.message, true);
+    state.items = [];
+    $("list-card").hidden = true;
+    $("empty").hidden = true;
+    $("load-more").hidden = true;
+    $("list-summary").textContent = "";
+    failure(error, "list-message");
+  } finally {
+    state.loading = false;
   }
 }
 
-function renderRows(items, append) {
+function renderRows() {
   const body = $("incident-table").querySelector("tbody");
-  if (!append) body.replaceChildren();
+  body.replaceChildren();
+  const items = visibleItems();
+  state.focusIndex = -1;
   for (const item of items) {
     const row = document.createElement("tr");
     row.tabIndex = 0;
+    row.dataset.id = item.incident_id;
+
     const statusCell = document.createElement("td");
     statusCell.append(badge(item.status));
-    row.append(
-      statusCell,
-      el("td", item.repo_name),
-      el("td", item.affected_file || "-", "mono"),
-      el("td", Number(item.quality_score).toFixed(2)),
-      el("td", item.iterations),
-      el("td", `${when(item.created_at)}${item.submitted_by ? " · " + item.submitted_by : ""}`),
-    );
-    const open = () => showDetail(item.incident_id);
-    row.addEventListener("click", open);
-    row.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); });
+    if (item.error_category) statusCell.append(el("span", humanize(item.error_category), "file"));
+
+    const repoCell = document.createElement("td");
+    const link = el("a", item.repo_name, "repo repo-link");
+    link.href = `#/incident/${encodeURIComponent(item.incident_id)}`;
+    repoCell.append(link, el("span", item.affected_file || "no source file", "file mono"));
+
+    const scoreCell = document.createElement("td");
+    const score = Number(item.quality_score) || 0;
+    const box = el("div", null, "score-cell");
+    box.title = "Deterministic rubric score from the quality gate, not a probability of being correct";
+    box.append(el("span", score.toFixed(2), "score-num"), meter(score, toneForScore(score)));
+    scoreCell.append(box);
+
+    const when = el("td", ago(item.created_at));
+    when.title = fullDate(item.created_at);
+    if (item.submitted_by) when.append(el("span", item.submitted_by, "file"));
+
+    row.append(statusCell, repoCell, scoreCell, el("td", item.iterations, "num"), when);
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("a")) return; // the link navigates by itself (middle-click, copy link, ...)
+      location.hash = `#/incident/${encodeURIComponent(item.incident_id)}`;
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") location.hash = `#/incident/${encodeURIComponent(item.incident_id)}`;
+    });
     body.append(row);
   }
-  $("incident-table").hidden = body.children.length === 0;
+
+  const total = state.items.length;
+  const awaiting = state.items.filter((i) => i.status === "awaiting_approval").length;
+  $("list-summary").textContent = total
+    ? `${total} loaded${items.length !== total ? ` (${items.length} match the search)` : ""} · ${awaiting} awaiting approval`
+    : "";
+  $("list-card").hidden = items.length === 0;
+  $("empty").hidden = items.length !== 0;
+  if (items.length === 0) {
+    const searching = total > 0;
+    $("empty-title").textContent = searching ? "No loaded incident matches your search" : "No incidents match this filter";
+    $("empty-text").textContent = searching
+      ? "Clear the search box or load older incidents."
+      : "Incidents appear here after an application, Sentry or Alertmanager reports a crash.";
+  }
+}
+
+function moveFocus(delta) {
+  const rows = [...$("incident-table").querySelectorAll("tbody tr[data-id]")];
+  if (!rows.length) return;
+  state.focusIndex = Math.max(0, Math.min(rows.length - 1, state.focusIndex + delta));
+  rows.forEach((row, i) => row.classList.toggle("focused", i === state.focusIndex));
+  rows[state.focusIndex].focus();
+  rows[state.focusIndex].scrollIntoView({ block: "nearest" });
 }
 
 // ------------------------------------------------------------------ detail
 
 async function showDetail(incidentId) {
+  $("list-view").hidden = true;
+  $("detail-view").hidden = false;
+  setMessage("a-message", "Loading…");
   try {
     const incident = await api(`/incidents/${encodeURIComponent(incidentId)}`);
     state.current = incident;
+    setConnection("on", "Connected");
     setMessage("a-message", "");
     renderDetail(incident);
-    $("list-view").hidden = true;
-    $("detail-view").hidden = false;
     window.scrollTo(0, 0);
   } catch (error) {
-    setMessage("list-message", error.message, true);
+    $("d-title").textContent = "Incident could not be loaded";
+    failure(error, "a-message");
   }
 }
 
-function renderDetail(incident) {
-  const analysis = incident.analysis || {};
-  const summary = analysis.incident_summary || {};
-  const root = ((analysis.diagnostic_chain || {}).primary_root_cause) || {};
-  $("d-title").textContent = summary.title || incident.error_message.split("\n")[0];
-  $("d-status").replaceWith(Object.assign(badge(incident.status), { id: "d-status" }));
-  $("d-id").textContent = incident.incident_id;
-  $("d-repo").textContent = incident.repo_name;
-  $("d-file").textContent = incident.affected_file || "-";
-  $("d-category").textContent = analysis.root_cause_category || "-";
-  $("d-score").textContent = `${Number(incident.quality_score).toFixed(2)} after ${incident.iterations} attempt(s)`;
-  $("d-submitter").textContent = incident.submitted_by || "-";
-  $("d-usage").textContent = usageSummary(analysis.attempts || []);
-  const reason = [incident.status_reason, incident.error_category && `(${incident.error_category})`].filter(Boolean);
-  $("d-reason").textContent = reason.join(" ");
-  $("d-root").textContent = root.technical_explanation || "No analysis available.";
+function showList() {
+  document.title = "OpsPulse Console";
+  $("detail-view").hidden = true;
+  $("list-view").hidden = false;
+  loadList();
+}
 
-  const evidence = $("d-evidence");
-  evidence.replaceChildren();
-  for (const item of analysis.evidence || []) {
-    const li = el("li");
-    li.append(el("span", item.kind, `kind kind-${item.kind}`), el("span", item.claim));
-    if (item.quote) li.append(el("span", `${item.source}: ${item.quote}`, "quote"));
-    evidence.append(li);
-  }
-  fillList("d-uncertainties", analysis.uncertainties);
-  fillList("d-tests", analysis.tests_to_run);
-
-  const checks = $("d-checks");
-  checks.replaceChildren();
-  const evaluation = analysis.evaluation || {};
-  for (const [name, check] of Object.entries(evaluation.checks || {})) {
-    const row = document.createElement("tr");
-    const ok = check.score >= check.max - 1e-9;
-    row.append(
-      el("td", `${name}${check.blocking ? " *" : ""}`),
-      el("td", `${Number(check.score).toFixed(2)} / ${Number(check.max).toFixed(2)}`, ok ? "s-ok" : "s-bad"),
-      el("td", check.detail),
-    );
-    checks.append(row);
-  }
-
-  renderAttempts(analysis.attempts || []);
-  renderDiff(incident.suggested_patch);
-  $("retry").hidden = incident.status !== "failed";
-  const pending = incident.pending_approval;
-  $("approval").hidden = !pending;
-  if (pending) $("a-sha").textContent = pending.patch_sha256;
+function route() {
+  const match = location.hash.match(/^#\/incident\/([0-9A-Fa-f-]{8,64})$/);
+  if (match) showDetail(match[1]); else showList();
 }
 
 function usageSummary(attempts) {
-  if (!attempts.length) return "-";
-  const sum = (key) => attempts.reduce((total, a) => total + (Number(a[key]) || 0), 0);
+  const called = attempts.filter((a) => a.latency_ms !== undefined);
+  if (!called.length) return "-";
+  const sum = (key) => called.reduce((total, a) => total + (Number(a[key]) || 0), 0);
   const tokens = sum("input_tokens") + sum("output_tokens");
-  const seconds = sum("latency_ms") / 1000;
-  return `${attempts.length} call(s), ${tokens.toLocaleString()} tokens, ${seconds.toFixed(1)} s`;
-}
-
-function renderAttempts(attempts) {
-  const body = $("d-attempts");
-  body.replaceChildren();
-  for (const a of attempts) {
-    const row = document.createElement("tr");
-    let gate = "not run";
-    let cls = "muted";
-    if (a.error_category) { gate = a.error_category; cls = "s-bad"; }
-    else if (a.gate_score !== undefined) {
-      gate = `${Number(a.gate_score).toFixed(2)} ${a.gate_passed ? "pass" : "fail"}`;
-      cls = a.gate_passed ? "s-ok" : "s-bad";
-    }
-    const failed = [...(a.failed_checks || []), ...(a.schema_error_fields || []).map((f) => `schema ${f}`)];
-    const llm = a.latency_ms === undefined ? "-"
-      : `${((Number(a.input_tokens) || 0) + (Number(a.output_tokens) || 0)).toLocaleString()} tok, ${(a.latency_ms / 1000).toFixed(1)} s`;
-    row.append(el("td", String(a.iteration ?? "?")), el("td", gate, cls), el("td", failed.join(", ") || "-"),
-      el("td", a.decision || "-"), el("td", llm));
-    body.append(row);
-  }
-  if (!attempts.length) {
-    const row = document.createElement("tr");
-    const cell = el("td", "No attempts recorded.", "muted");
-    cell.colSpan = 5;
-    row.append(cell);
-    body.append(row);
-  }
+  return `${called.length} call(s) · ${tokens.toLocaleString()} tokens · ${(sum("latency_ms") / 1000).toFixed(1)} s`;
 }
 
 function fillList(id, values) {
@@ -219,17 +313,211 @@ function fillList(id, values) {
   if (!list.children.length) list.append(el("li", "none", "muted"));
 }
 
-function renderDiff(patch) {
-  const pre = $("d-patch");
-  pre.replaceChildren();
-  if (!patch) { pre.append(el("span", "No patch proposed.")); return; }
-  for (const line of patch.split("\n")) {
-    let cls = "";
-    if (line.startsWith("@@")) cls = "hunk";
-    else if (line.startsWith("+") && !line.startsWith("+++")) cls = "add";
-    else if (line.startsWith("-") && !line.startsWith("---")) cls = "del";
-    pre.append(el("span", line || " ", cls));
+function renderDetail(incident) {
+  const analysis = incident.analysis || {};
+  const summary = analysis.incident_summary || {};
+  const meta = analysis.execution_metadata || {};
+  const evaluation = analysis.evaluation || {};
+  const flow = analysis.control_flow || {};
+  const root = (analysis.diagnostic_chain || {}).primary_root_cause || {};
+  const attempts = analysis.attempts || [];
+
+  $("d-title").textContent = summary.title || String(incident.error_message || "").split("\n")[0] || "Incident";
+  document.title = `${$("d-title").textContent} - OpsPulse`;
+  $("d-status").replaceWith(Object.assign(badge(incident.status), { id: "d-status" }));
+  const severity = $("d-severity");
+  severity.hidden = !summary.severity;
+  severity.textContent = summary.severity ? `severity ${String(summary.severity).toLowerCase()}` : "";
+  $("d-id").textContent = incident.incident_id;
+
+  const pr = $("d-pr");
+  const safePr = typeof incident.pr_url === "string" && incident.pr_url.startsWith("https://");
+  pr.hidden = !safePr;
+  if (safePr) pr.href = incident.pr_url;
+
+  const reason = [humanize(incident.status_reason), incident.error_category && `(${humanize(incident.error_category)})`];
+  if (incident.available_at) reason.push(`- retry not before ${fullDate(incident.available_at)}`);
+  const reasonText = reason.filter(Boolean).join(" ");
+  const banner = $("d-reason");
+  banner.hidden = !reasonText;
+  banner.textContent = reasonText;
+  banner.classList.toggle("bad", incident.status === "failed" || incident.status === "pr_failed");
+
+  $("d-repo").textContent = incident.repo_name;
+  $("d-file").textContent = incident.affected_file || "-";
+  $("d-category").textContent = humanize(analysis.root_cause_category) || "-";
+  const score = Number(incident.quality_score) || 0;
+  $("d-score").textContent = `${score.toFixed(2)} after ${incident.iterations} attempt(s)`;
+  const confidence = flow.self_assessed_confidence;
+  $("d-confidence").textContent = typeof confidence === "number" ? `${confidence.toFixed(2)} (uncalibrated)` : "-";
+  $("d-submitter").textContent = incident.submitted_by || "-";
+  $("d-usage").textContent = usageSummary(attempts);
+  $("d-versions").textContent = [meta.model, meta.prompt_version, meta.evaluator_version].filter(Boolean).join(" · ") || "-";
+  $("d-root").textContent = root.technical_explanation || "No analysis available.";
+
+  renderEvidence(analysis.evidence || []);
+  fillList("d-uncertainties", analysis.uncertainties);
+  fillList("d-tests", analysis.tests_to_run);
+  renderChecks(evaluation);
+  renderAttempts(attempts);
+  renderDiff(incident.suggested_patch);
+  $("d-error").textContent = incident.error_message || "";
+
+  $("retry").hidden = incident.status !== "failed";
+  const pending = incident.pending_approval;
+  $("approval").hidden = !pending;
+  if (pending) $("a-sha").textContent = pending.patch_sha256;
+}
+
+function renderEvidence(items) {
+  const list = $("d-evidence");
+  list.replaceChildren();
+  const filter = state.evidenceFilter;
+  const shown = items.filter((item) => filter === "all" || (filter === "observed" ? item.kind === "observed"
+    : item.kind !== "observed"));
+  for (const item of shown) {
+    const li = el("li");
+    li.append(el("span", item.kind, `kind kind-${item.kind}`), el("span", item.claim));
+    if (item.quote) {
+      const quote = el("span", item.quote, "quote");
+      li.append(quote);
+      if (item.source) li.append(el("span", `from ${humanize(item.source)}`, "file"));
+    }
+    list.append(li);
   }
+  if (!shown.length) list.append(el("li", items.length ? "Nothing in this filter." : "No evidence recorded.", "muted"));
+}
+
+function renderChecks(evaluation) {
+  const list = $("d-checks");
+  list.replaceChildren();
+  const checks = Object.entries(evaluation.checks || {}).map(([name, check]) => ({
+    name, check, fraction: check.max ? check.score / check.max : 0,
+  }));
+  checks.sort((a, b) => a.fraction - b.fraction || a.name.localeCompare(b.name)); // failures first
+  for (const { name, check, fraction } of checks) {
+    const full = fraction >= 1 - 1e-9;
+    const tone = full ? "ok" : check.blocking ? "bad" : "warn";
+    const li = el("li");
+    const label = el("span", null, "check-name");
+    label.append(document.createTextNode(humanize(name)));
+    if (check.blocking) label.append(document.createTextNode(" "), el("span", "blocking", "chip"));
+    const gauge = el("span", null, "check-meter");
+    gauge.append(meter(fraction, tone),
+      el("span", `${Number(check.score).toFixed(2)} / ${Number(check.max).toFixed(2)}`, "score-num"));
+    li.append(label, gauge);
+    if (check.detail && check.detail !== "ok") li.append(el("span", check.detail, "check-detail"));
+    list.append(li);
+  }
+  const gate = $("d-gate");
+  const known = typeof evaluation.quality_gate_passed === "boolean";
+  gate.hidden = !known;
+  if (known) {
+    const passed = evaluation.quality_gate_passed;
+    gate.className = `badge ${passed ? "s-ok" : "s-bad"}`;
+    gate.textContent = `${passed ? "passed" : "not passed"} · ${Number(evaluation.quality_score).toFixed(2)}`;
+  }
+  if (!checks.length) list.append(el("li", "No gate result recorded.", "muted"));
+}
+
+function renderAttempts(attempts) {
+  const list = $("d-attempts");
+  list.replaceChildren();
+  for (const a of attempts) {
+    const failedCall = Boolean(a.error_category);
+    const judged = a.gate_score !== undefined;
+    const tone = failedCall ? "bad" : judged ? (a.gate_passed ? "ok" : "warn") : "neutral";
+    const li = el("li", null, tone);
+    const head = el("div", null, "tl-head");
+    head.append(el("span", `Attempt ${a.iteration ?? "?"}`));
+    if (failedCall) head.append(el("span", humanize(a.error_category), "chip bad"));
+    else if (judged) {
+      head.append(el("span", `${Number(a.gate_score).toFixed(2)} ${a.gate_passed ? "pass" : "fail"}`,
+        `badge ${a.gate_passed ? "s-ok" : "s-warn"}`));
+    }
+    if (a.truncated) head.append(el("span", "cut at token limit", "chip warn"));
+    li.append(head);
+
+    const bits = [];
+    if (a.decision) bits.push(a.decision);
+    if (a.latency_ms !== undefined) {
+      const tokens = (Number(a.input_tokens) || 0) + (Number(a.output_tokens) || 0);
+      bits.push(`${(a.latency_ms / 1000).toFixed(1)} s${tokens ? ` · ${tokens.toLocaleString()} tokens` : ""}`);
+    }
+    if (bits.length) li.append(el("div", bits.join(" - "), "tl-body"));
+
+    const failed = [...(a.failed_checks || []).map(humanize),
+      ...(a.schema_error_fields || []).map((f) => `schema ${f}`)];
+    if (failed.length) {
+      const chips = el("div", null, "chips");
+      for (const name of failed) chips.append(el("span", name, "chip src"));
+      li.append(chips);
+    }
+    list.append(li);
+  }
+  if (!attempts.length) list.append(el("li", "No attempts recorded.", "muted"));
+}
+
+function renderDiff(patch) {
+  const view = $("d-patch");
+  view.replaceChildren();
+  $("copy-patch").hidden = !patch;
+  $("download-patch").hidden = !patch;
+  if (!patch) {
+    view.append(el("div", "No patch proposed.", "empty-note"));
+    return;
+  }
+  let oldLine = 0;
+  let newLine = 0;
+  for (const text of patch.split("\n")) {
+    const hunk = text.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)/);
+    let kind = "ctx";
+    let left = "";
+    let right = "";
+    if (hunk) {
+      kind = "hunk";
+      oldLine = Number(hunk[1]);
+      newLine = Number(hunk[2]);
+    } else if (text.startsWith("---") || text.startsWith("+++") || text.startsWith("\\")) {
+      kind = "meta";
+    } else if (text.startsWith("+")) {
+      kind = "add";
+      right = String(newLine++);
+    } else if (text.startsWith("-")) {
+      kind = "del";
+      left = String(oldLine++);
+    } else {
+      left = String(oldLine++);
+      right = String(newLine++);
+    }
+    const row = el("div", null, `row ${kind}`);
+    row.append(el("span", left, "ln"), el("span", right, "ln"), el("span", text, "code"));
+    view.append(row);
+  }
+}
+
+// ------------------------------------------------------------------ actions
+
+async function copyText(text, what) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(`${what} copied`);
+  } catch {
+    toast("Copy is not available in this browser context", true);
+  }
+}
+
+function downloadPatch() {
+  const incident = state.current;
+  if (!incident || !incident.suggested_patch) return;
+  const url = URL.createObjectURL(new Blob([incident.suggested_patch], { type: "text/x-diff" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${incident.incident_id.slice(0, 8)}.patch`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 async function retry() {
@@ -240,7 +528,7 @@ async function retry() {
     const updated = await api(`/incidents/${encodeURIComponent(incident.incident_id)}/retry`, { method: "POST" });
     state.current = updated;
     renderDetail(updated);
-    setMessage("a-message", "Re-queued: a worker will analyse it again.");
+    toast("Re-queued: a worker will analyse it again");
   } catch (error) {
     setMessage("a-message", error.message, true);
   } finally {
@@ -248,11 +536,27 @@ async function retry() {
   }
 }
 
+function confirmApproval(incident, pending) {
+  const dialog = $("confirm");
+  if (typeof dialog.showModal !== "function") {
+    return Promise.resolve(window.confirm("Open a draft pull request with this patch?"));
+  }
+  $("c-repo").textContent = incident.repo_name;
+  $("c-file").textContent = pending.target_file || incident.affected_file || "-";
+  $("c-sha").textContent = pending.patch_sha256;
+  $("c-score").textContent = Number(incident.quality_score).toFixed(2);
+  dialog.returnValue = "";
+  return new Promise((resolve) => {
+    dialog.addEventListener("close", () => resolve(dialog.returnValue === "confirm"), { once: true });
+    dialog.showModal();
+  });
+}
+
 async function decide(decision) {
   const incident = state.current;
   const pending = incident && incident.pending_approval;
   if (!pending) return;
-  if (decision === "approve" && !window.confirm("Open a draft pull request with this patch?")) return;
+  if (decision === "approve" && !(await confirmApproval(incident, pending))) return;
   for (const id of ["approve", "reject"]) $(id).disabled = true;
   setMessage("a-message", "Submitting…");
   try {
@@ -267,7 +571,8 @@ async function decide(decision) {
     });
     state.current = updated;
     renderDetail(updated);
-    setMessage("a-message", `Decision recorded: ${updated.status.replaceAll("_", " ")}`);
+    setMessage("a-message", "");
+    toast(`Decision recorded: ${humanize(updated.status)}`);
   } catch (error) {
     setMessage("a-message", error.message, true);
   } finally {
@@ -277,21 +582,68 @@ async function decide(decision) {
 
 // ------------------------------------------------------------------ wiring
 
+function typing(target) {
+  return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.metaKey || event.ctrlKey || event.altKey || $("confirm").open) return;
+  if (event.key === "Escape" && !$("detail-view").hidden) {
+    location.hash = "#/";
+    return;
+  }
+  if (typing(event.target) || !$("detail-view").hidden) return;
+  if (event.key === "/") { event.preventDefault(); $("search").focus(); }
+  else if (event.key === "r") loadList();
+  else if (event.key === "j") moveFocus(1);
+  else if (event.key === "k") moveFocus(-1);
+});
+
+let refreshTimer = null;
+function setAutoRefresh(on) {
+  store("local", REFRESH_STORAGE, on ? "1" : null);
+  clearInterval(refreshTimer);
+  refreshTimer = on ? setInterval(() => {
+    if (!document.hidden && !$("list-view").hidden) loadList();
+  }, REFRESH_MS) : null;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  applyTheme(store("local", THEME_STORAGE) || "auto");
+  $("theme").addEventListener("click", cycleTheme);
   $("key-form").addEventListener("submit", (event) => {
     event.preventDefault();
     setKey($("api-key").value.trim());
     $("api-key").value = "";
-    loadList();
+    route();
   });
-  $("forget-key").addEventListener("click", () => { setKey(""); loadList(); });
-  $("status-filter").addEventListener("change", () => loadList());
+  $("forget-key").addEventListener("click", () => {
+    setKey("");
+    state.items = [];
+    setConnection("off", "Not connected");
+    route();
+  });
+  $("status-filter").addEventListener("change", () => { state.items = []; loadList(); });
+  $("search").addEventListener("input", renderRows);
   $("refresh").addEventListener("click", () => loadList());
   $("load-more").addEventListener("click", () => loadList(true));
-  $("back").addEventListener("click", () => { $("detail-view").hidden = true; $("list-view").hidden = false; loadList(); });
+  $("auto-refresh").checked = Boolean(store("local", REFRESH_STORAGE));
+  $("auto-refresh").addEventListener("change", (event) => setAutoRefresh(event.target.checked));
+  setAutoRefresh($("auto-refresh").checked);
   $("approve").addEventListener("click", () => decide("approve"));
   $("reject").addEventListener("click", () => decide("reject"));
   $("retry").addEventListener("click", retry);
+  $("copy-id").addEventListener("click", () => state.current && copyText(state.current.incident_id, "Incident id"));
+  $("copy-patch").addEventListener("click", () => state.current && copyText(state.current.suggested_patch || "", "Patch"));
+  $("download-patch").addEventListener("click", downloadPatch);
+  for (const button of document.querySelectorAll(".seg-btn")) {
+    button.addEventListener("click", () => {
+      state.evidenceFilter = button.dataset.kind;
+      document.querySelectorAll(".seg-btn").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      if (state.current) renderEvidence((state.current.analysis || {}).evidence || []);
+    });
+  }
   $("forget-key").hidden = !apiKey();
-  loadList();
+  window.addEventListener("hashchange", route);
+  route();
 });

@@ -53,3 +53,33 @@ def test_console_can_be_disabled(monkeypatch):
     finally:
         monkeypatch.undo()
         importlib.reload(main_module)
+
+
+def test_console_loads_nothing_from_other_origins_and_never_sets_a_style_attribute():
+    sources = {name: (STATIC_DIR / name).read_text(encoding="utf-8") for name in ("index.html", "app.js", "styles.css")}
+    for name, text in sources.items():
+        assert not re.search(r"https?://(?!localhost)", re.sub(r"//.*", "", text)), f"{name} references another origin"
+        assert "@import" not in text and "url(" not in sources["styles.css"]
+    js = sources["app.js"]
+    assert 'setAttribute("style"' not in js and "cssText" not in js  # CSSOM property writes only (CSP-safe)
+    assert 'href="/console/static/styles.css"' in sources["index.html"]
+
+
+def test_console_has_the_confirmation_dialog_and_live_regions():
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    assert "<dialog" in html and 'aria-live="polite"' in html and 'class="skip-link"' in html
+    assert 'id="approve"' in html and 'id="confirm-ok"' in html
+
+
+def test_console_script_is_syntactically_valid():
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    args = [node, "--check", str(STATIC_DIR / "app.js")]  # fixed arguments, no untrusted input
+    result = subprocess.run(args, capture_output=True, text=True, check=False)  # noqa: S603
+    assert result.returncode == 0, result.stderr
