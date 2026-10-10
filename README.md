@@ -24,7 +24,7 @@ which waits for an **explicit human approval** and is never merged automatically
 
 - [Features](#features) · [Architecture](#architecture) · [Workflow and statuses](#workflow-and-statuses)
 - [Quality gate](#quality-gate) · [Evaluation](#evaluation) · [Retrieval](#retrieval)
-- [Human approval](#human-approval-and-remediation-safety) · [Sentry](#sentry-integration) · [Review console](#review-console) · [Observability](#observability-langfuse)
+- [Human approval](#human-approval-and-remediation-safety) · [Sentry](#sentry-integration) · [Notifications](#reviewer-notifications) · [Review console](#review-console) · [Observability](#observability-langfuse)
 - [Setup](#setup) · [API](#api) · [Testing and CI](#testing-and-ci) · [Demo](#demo)
 - [Security](#security-model) · [Limitations](#known-limitations) · [Roadmap](#roadmap)
 
@@ -43,7 +43,7 @@ which waits for an **explicit human approval** and is never merged automatically
 | Persistence | PostgreSQL/Neon via SQLAlchemy 2, Alembic migrations, failure taxonomy (`error_category`) |
 | Observability | Structured JSON logs with incident correlation and secret redaction; Langfuse v4 traces with content masking by default; Prometheus `/metrics` (content-free labels) |
 | Evaluation | 26-case synthetic RCA dataset, deterministic metrics, mock and live modes; labelled retrieval dataset comparing two ranking strategies |
-| Delivery | 204 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
+| Delivery | 210 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
 
 ## Architecture
 
@@ -255,11 +255,12 @@ explicitly, and the schema normalises unrecognised sources on *unverified* (infe
 | evidence_grounding_accuracy | 1.00 (52/52) |
 | average attempts per case | 1.31 |
 
-**Held-out set** (`--dataset holdout`, 12 cases written before any model run on them): the first live run was
-cut short by the free-tier daily token quota after 6 cases. On those 6 the model was correct in all of them
-(category 6/6, quotes 13/13, 1 attempt each). The 6 not yet evaluated include the deploy-drift case and both
-inconclusive cases, so this is **not yet evidence that the gains generalise**; the run will be completed when the
-quota resets ([partial report](evals/results/rca-holdout-live-2026-10-10-prompt-v4-gate-v4-partial.md)).
+**Held-out set** (`--dataset holdout`, 12 cases written before any model run on them): two live runs were cut
+short by the free-tier daily token quota; merged with `python -m evals.merge_reports` (which refuses to merge
+runs of different configurations), 7 of 12 cases are evaluated so far: category 7/7, quotes 15/15, no false
+acceptance, 1 attempt each. The 5 not yet evaluated include the deploy-drift case and both inconclusive cases, so
+this is **not yet evidence that the gains generalise**
+([partial report](evals/results/rca-holdout-live-2026-10-10-prompt-v4-gate-v4-partial.md)).
 
 What the first live run showed, and what changed:
 
@@ -349,6 +350,15 @@ queued incident submitted by the identity `sentry` (so a human reviewer can appr
 `in_app` frames are turned into a Python-style traceback for the parser, and the incident id is derived from
 Sentry's `event_id`, so repeated deliveries return the existing incident instead of analysing it twice.
 
+## Reviewer notifications
+
+Set `NOTIFY_WEBHOOK_URL` (an `https://` incoming-webhook URL; Slack and Mattermost accept the `{"text": ...}`
+payload) to be told when an incident reaches a status in `NOTIFY_ON_STATUSES` (default
+`awaiting_approval,failed`). With `PUBLIC_BASE_URL` the message links to the review console. The message
+contains only status, repository, a sanitised one-line title (no `@`-mentions or link markup from model text),
+quality score and category - never stack traces, source code or patches. Delivery failures are logged and
+counted (`opspulse_notifications_total`) and never affect incident processing.
+
 ## Review console
 
 `GET /console` serves a small dependency-free web UI for reviewers: filter incidents (default: awaiting
@@ -398,6 +408,7 @@ unit tests with a fake client.
 | `opspulse_remediation_decisions_total` | counter | `decision` |
 | `opspulse_queue_depth` | gauge | - (sampled by the worker) |
 | `opspulse_jobs_recovered_total` | counter | `outcome` (requeued / failed) |
+| `opspulse_notifications_total` | counter | `outcome` (sent / failed) |
 
 Labels never contain repository names, identities, paths or error text. Counters are per process.
 Example alert rules: [`deploy/prometheus/alerts.yml`](deploy/prometheus/alerts.yml) (validated with `promtool`
@@ -504,7 +515,7 @@ stack traces or connection strings. Re-sending a request with the same `incident
 ## Testing and CI
 
 ```bash
-pytest                               # 204 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
+pytest                               # 210 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
 pytest --cov=src --cov=evals         # coverage (87% total at time of writing)
 ruff check src tests evals scripts migrations && ruff format --check src tests evals scripts migrations
 mypy                                 # src/

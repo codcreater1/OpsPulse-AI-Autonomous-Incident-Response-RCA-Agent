@@ -40,6 +40,7 @@ from src.config import settings
 from src.db import repositories
 from src.errors import ErrorCategory
 from src.integrations import github
+from src.integrations.notify import notify_incident
 from src.integrations.observability import build_run_config, flush_traces, incident_trace
 from src.logging_config import incident_id_var, redact
 from src.services import remediation_service
@@ -205,6 +206,7 @@ def _run(
             incident_id, claim_token=claim_token, status=status, status_reason=redact(reason), error_category=category
         )
     result = _load(incident_id)
+    notify_incident(result)
     logger.info(
         "incident finished: status=%s score=%.2f attempts=%d",
         result["status"],
@@ -260,7 +262,9 @@ def decide_remediation(
         _persist_or_raise(incident_id, **_outcome_fields(outcome))
         metrics.record_decision(approve)
         metrics.record_incident(outcome.status, outcome.category.value if outcome.category else None)
-        return _load(incident_id)
+        updated = _load(incident_id)
+        notify_incident(updated)
+        return updated
     except SQLAlchemyError as exc:
         raise DatabaseUnavailableError("database unavailable") from exc
     finally:

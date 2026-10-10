@@ -73,6 +73,17 @@ class ApiIdentity:
     key_sha256: str
 
 
+def _https_url(name: str) -> str:
+    value = _env(name)
+    if value and not value.lower().startswith("https://"):
+        raise ConfigError(f"{name} must be an https:// URL")
+    return value
+
+
+def _status_set(name: str, default: str) -> frozenset[str]:
+    return frozenset(item.strip() for item in (os.getenv(name) or default).split(",") if item.strip())
+
+
 def _sentry_projects() -> dict[str, str]:
     from src.integrations.sentry import parse_project_map
 
@@ -152,6 +163,14 @@ class Settings:
     # --- Inbound integrations ---
     sentry_client_secret: str = field(default_factory=lambda: _env("SENTRY_CLIENT_SECRET"))
     sentry_project_repos: dict[str, str] = field(default_factory=_sentry_projects)
+
+    # --- Notifications ---
+    notify_webhook_url: str = field(default_factory=lambda: _https_url("NOTIFY_WEBHOOK_URL"))
+    notify_on_statuses: frozenset[str] = field(
+        default_factory=lambda: _status_set("NOTIFY_ON_STATUSES", "awaiting_approval,failed")
+    )
+    # Public URL of this service, used only to put console links into notifications.
+    public_base_url: str = field(default_factory=lambda: _env("PUBLIC_BASE_URL"))
 
     # --- Workflow ---
     quality_threshold: float = field(

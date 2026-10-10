@@ -6,6 +6,9 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Added
+- Reviewer notifications to an https incoming webhook (Slack/Mattermost format) for selected statuses;
+  content-free messages, failures never affect processing.
+- `python -m evals.merge_reports`: merge partial runs of the same configuration (refuses mismatched versions).
 - `rca-prompt-v4`: explicit rules for non-empty `uncertainties` and valid evidence sources; schema normalises
   unrecognised sources on unverified evidence. Live: schema validity 0.61 -> 0.91, attempts 1.50 -> 1.31.
 - Held-out evaluation set (`evals/datasets/rca_holdout.json`, 12 cases written before any model run on them);

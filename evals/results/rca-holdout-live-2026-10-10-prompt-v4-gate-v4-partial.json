@@ -1,6 +1,5 @@
 {
   "mode": "live",
-  "started_at": "2026-10-10T10:25:52.688962+00:00",
   "dataset_version": "rca-holdout-v1",
   "run_metadata": {
     "agent_version": "1.1.0-opspulse",
@@ -11,10 +10,15 @@
     "quality_threshold": 0.85,
     "max_analysis_iterations": 3
   },
+  "started_at": "2026-10-10T10:25:52.688962+00:00",
+  "merged_at": "2026-10-10T10:47:15.276547+00:00",
+  "merged_from": [
+    "2026-10-10T10:25:52.688962+00:00",
+    "2026-10-10T10:45:19.291891+00:00"
+  ],
   "metrics": {
     "cases": 12,
     "cases_not_evaluated": [
-      "ho-str-price",
       "ho-off-by-one",
       "ho-missing-package",
       "ho-gateway-timeout",
@@ -23,26 +27,26 @@
     ],
     "structured_output_validity": {
       "value": 1.0,
-      "numerator": 6,
-      "denominator": 6,
+      "numerator": 7,
+      "denominator": 7,
       "definition": "LLM attempts whose reply validated against RCAOutput / LLM attempts (provider errors excluded)"
     },
     "category_accuracy": {
       "value": 1.0,
-      "numerator": 6,
-      "denominator": 6,
+      "numerator": 7,
+      "denominator": 7,
       "definition": "final category == labelled category / cases labelled conclusive"
     },
     "evidence_grounding_accuracy": {
       "value": 1.0,
-      "numerator": 13,
-      "denominator": 13,
+      "numerator": 15,
+      "denominator": 15,
       "definition": "'observed' quotes found verbatim in their cited source / all 'observed' quotes (final analyses)"
     },
     "unsupported_claim_rate": {
       "value": 0.0,
       "numerator": 0,
-      "denominator": 19,
+      "denominator": 22,
       "definition": "(unverifiable 'observed' quotes + affected files absent from trace/retrieved file) / (all quotes + all affected files)"
     },
     "abstention_recall": {
@@ -60,47 +64,47 @@
     "false_abstention_rate": {
       "value": 0.0,
       "numerator": 0,
-      "denominator": 6,
+      "denominator": 7,
       "definition": "conclusive-labelled cases where the model abstained / conclusive-labelled cases"
     },
     "gate_acceptance_rate": {
       "value": 1.0,
-      "numerator": 6,
-      "denominator": 6,
+      "numerator": 7,
+      "denominator": 7,
       "definition": "cases accepted by the quality gate / evaluated cases"
     },
     "false_acceptance_rate": {
       "value": 0.0,
       "numerator": 0,
-      "denominator": 6,
+      "denominator": 7,
       "definition": "accepted cases that are inconclusive-labelled or have the wrong category / accepted cases"
     },
     "relevant_file_hit_rate": {
       "value": 1.0,
-      "numerator": 6,
-      "denominator": 6,
+      "numerator": 7,
+      "denominator": 7,
       "definition": "cases whose affected_files contain a labelled relevant file / cases with labelled files"
     },
     "workflow_failure_rate": {
-      "value": 0.5,
-      "numerator": 6,
+      "value": 0.4167,
+      "numerator": 5,
       "denominator": 12,
       "definition": "cases ending in workflow status 'failed' (e.g. provider errors) / cases"
     },
     "avg_attempts": 1.0,
     "llm_latency_ms": {
-      "mean": 3942,
-      "p95": 4838,
-      "samples": 6
+      "mean": 4086,
+      "p95": 4951,
+      "samples": 7
     },
     "case_wall_ms": {
-      "mean": 2021,
-      "p95": 4842
+      "mean": 2429,
+      "p95": 4962
     },
     "tokens": {
-      "input": 11801,
-      "output": 9330,
-      "attempts_with_usage": 6
+      "input": 13755,
+      "output": 11197,
+      "attempts_with_usage": 7
     },
     "estimated_cost_usd": null
   },
@@ -318,23 +322,30 @@
           "app/csv_import.py"
         ]
       },
-      "workflow_status": "failed",
-      "error_category": "llm_rate_limited",
-      "gate_passed": false,
-      "quality_score": 0.0,
-      "predicted_category": null,
+      "workflow_status": "accepted",
+      "error_category": null,
+      "gate_passed": true,
+      "quality_score": 0.985,
+      "predicted_category": "type_error",
       "declared_insufficient": false,
-      "observed_quotes": 0,
-      "grounded_quotes": 0,
-      "affected_files": [],
-      "grounded_files": 0,
+      "observed_quotes": 2,
+      "grounded_quotes": 2,
+      "affected_files": [
+        "app/csv_import.py"
+      ],
+      "grounded_files": 1,
       "attempts": [
         {
           "iteration": 1,
-          "error_category": "llm_rate_limited"
+          "latency_ms": 4951,
+          "input_tokens": 1954,
+          "output_tokens": 1867,
+          "valid_json": true,
+          "schema_valid": true,
+          "schema_error_fields": []
         }
       ],
-      "wall_ms": 86
+      "wall_ms": 4962
     },
     {
       "case_id": "ho-off-by-one",
@@ -361,7 +372,7 @@
           "error_category": "llm_rate_limited"
         }
       ],
-      "wall_ms": 91
+      "wall_ms": 94
     },
     {
       "case_id": "ho-missing-package",
@@ -388,7 +399,7 @@
           "error_category": "llm_rate_limited"
         }
       ],
-      "wall_ms": 95
+      "wall_ms": 96
     },
     {
       "case_id": "ho-gateway-timeout",
@@ -413,7 +424,7 @@
           "error_category": "llm_rate_limited"
         }
       ],
-      "wall_ms": 97
+      "wall_ms": 98
     },
     {
       "case_id": "ho-drift-attribute",
@@ -440,7 +451,7 @@
           "error_category": "llm_rate_limited"
         }
       ],
-      "wall_ms": 110
+      "wall_ms": 117
     },
     {
       "case_id": "ho-pool-timeout",
@@ -467,7 +478,7 @@
           "error_category": "llm_rate_limited"
         }
       ],
-      "wall_ms": 94
+      "wall_ms": 101
     }
   ]
 }
