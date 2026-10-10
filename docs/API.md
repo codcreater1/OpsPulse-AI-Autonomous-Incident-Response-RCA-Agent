@@ -151,8 +151,8 @@ integration's Client Secret); the Sentry project must be mapped to an allow-list
 | 401 | Unauthorized |
 | 403 | Forbidden |
 | 404 | Not Found |
-| 413 | Request Entity Too Large |
-| 422 | Unprocessable Entity |
+| 413 | Payload too large |
+| 422 | Unprocessable request |
 | 429 | Too Many Requests |
 
 ### `POST /integrations/alertmanager`
@@ -167,8 +167,8 @@ label (default `repository`) and must be allow-listed. Repeated notifications ar
 |---|---|
 | 202 | Successful Response |
 | 401 | Unauthorized |
-| 413 | Request Entity Too Large |
-| 422 | Unprocessable Entity |
+| 413 | Payload too large |
+| 422 | Unprocessable request |
 | 429 | Too Many Requests |
 | 503 | Service Unavailable |
 

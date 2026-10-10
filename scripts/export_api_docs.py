@@ -25,6 +25,21 @@ TAG_TITLES = {
 }
 
 
+# FastAPI takes undocumented response descriptions from http.HTTPStatus, whose wording changed in Python 3.13
+# ("Request Entity Too Large" -> "Content Too Large"). Pin them so the generated file is identical on every version.
+STABLE_STATUS_TEXT = {"413": "Payload too large", "422": "Unprocessable request"}
+HTTPSTATUS_PHRASES = {
+    "413": {"Request Entity Too Large", "Payload Too Large", "Content Too Large"},
+    "422": {"Unprocessable Entity", "Unprocessable Content"},
+}
+
+
+def _response_text(code: str, description: str) -> str:
+    if description in HTTPSTATUS_PHRASES.get(code, ()):
+        return STABLE_STATUS_TEXT[code]
+    return description
+
+
 def _ref_name(ref: str) -> str:
     return ref.rsplit("/", 1)[-1]
 
@@ -102,7 +117,7 @@ def render(spec: dict[str, Any]) -> str:
                     ]
             lines += ["| Status | Meaning |", "|---|---|"]
             for code, response in op.get("responses", {}).items():
-                meaning = (response.get("description") or "").replace("\n", " ")
+                meaning = _response_text(code, (response.get("description") or "").replace("\n", " "))
                 lines.append(f"| {code} | {meaning} |")
             lines.append("")
     return "\n".join(lines).rstrip() + "\n"
