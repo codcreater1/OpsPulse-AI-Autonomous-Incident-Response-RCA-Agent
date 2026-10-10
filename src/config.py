@@ -116,6 +116,12 @@ def _identities() -> tuple[ApiIdentity, ...]:
 class Settings:
     """Immutable snapshot of the environment, created once at import time."""
 
+    # --- "Ask about this incident" (grounded Q&A over the stored record) ---
+    ask_enabled: bool = field(default_factory=lambda: _env("ASK_ENABLED", default="true").lower() != "false")
+    ask_rate_limit_per_minute: int = field(
+        default_factory=lambda: int(_number(("ASK_RATE_LIMIT_PER_MINUTE",), 10, int, 0, 600))
+    )
+
     # --- Alertmanager webhook: the alert label that names the GitHub repository ---
     alertmanager_repo_label: str = field(default_factory=lambda: _env("ALERTMANAGER_REPO_LABEL", default="repository"))
 

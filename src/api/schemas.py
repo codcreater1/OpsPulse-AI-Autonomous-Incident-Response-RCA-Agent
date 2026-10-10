@@ -21,6 +21,21 @@ IncidentStatus = Literal[
 ]
 
 
+class AskRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(..., min_length=3, max_length=500, description="A question about this incident's record")
+
+
+class AskResponse(BaseModel):
+    answer: str
+    answerable: bool = Field(description="False when the incident record does not contain the answer")
+    grounded: bool = Field(description="False when the model cited no section of the record for its answer")
+    cited_sections: list[str] = Field(description="Sections of the record the answer is based on")
+    model: str
+    disclaimer: str
+
+
 class AlertOutcome(BaseModel):
     alert: str
     incident_id: str | None

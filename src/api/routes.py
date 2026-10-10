@@ -11,8 +11,10 @@ from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.api.auth import Principal, authenticate, rate_limited_reporter, require_role
+from src.api.auth import Principal, authenticate, rate_limited_asker, rate_limited_reporter, require_role
 from src.api.schemas import (
+    AskRequest,
+    AskResponse,
     ErrorResponse,
     HealthResponse,
     IncidentAccepted,
@@ -26,7 +28,7 @@ from src.api.schemas import (
 from src.config import settings
 from src.db.client import ping_database
 from src.db.repositories import InvalidCursorError
-from src.services import incident_service
+from src.services import ask_service, incident_service
 from src.services.incident_service import DatabaseUnavailableError, IncidentConflictError, IncidentNotFoundError
 from src.services.remediation_service import ApprovalError
 
@@ -209,3 +211,38 @@ def retry_incident(
     except DatabaseUnavailableError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "database unavailable") from exc
     return IncidentResult(**row)
+
+
+@router.post(
+    "/incidents/{incident_id}/ask",
+    response_model=AskResponse,
+    tags=["incidents"],
+    responses={
+        **_ERRORS,
+        404: {"model": ErrorResponse},
+        429: {"model": ErrorResponse, "description": "Question rate limit exceeded (see Retry-After)"},
+        502: {"model": ErrorResponse, "description": "The LLM provider could not answer"},
+        504: {"model": ErrorResponse, "description": "The LLM provider timed out"},
+    },
+)
+def ask_about_incident(
+    incident_id: uuid.UUID, body: AskRequest, principal: Annotated[Principal, Depends(rate_limited_asker)]
+) -> AskResponse:
+    """Ask a question about one incident (roles: reporter, reviewer, admin).
+
+    The answer is generated from the incident's stored record only, is stateless (no conversation memory), triggers
+    no action, and names the sections it used. `grounded=false` means the model cited nothing from the record -
+    treat such an answer with suspicion. It was not executed or verified.
+    """
+    if not settings.ask_enabled:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "question answering is disabled")
+    try:
+        result = ask_service.ask(incident_id, body.question)
+    except IncidentNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "incident not found") from exc
+    except DatabaseUnavailableError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "database unavailable") from exc
+    except ask_service.AskUnavailableError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+    logger.info("question answered for %s by %s", incident_id, principal.name)
+    return AskResponse(**result)

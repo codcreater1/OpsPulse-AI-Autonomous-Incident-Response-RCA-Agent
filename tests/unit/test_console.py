@@ -83,3 +83,11 @@ def test_console_script_is_syntactically_valid():
     args = [node, "--check", str(STATIC_DIR / "app.js")]  # fixed arguments, no untrusted input
     result = subprocess.run(args, capture_output=True, text=True, check=False)  # noqa: S603
     assert result.returncode == 0, result.stderr
+
+
+def test_console_ask_panel_is_wired_and_uses_only_text_nodes():
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    assert 'id="ask-form"' in html and 'id="ask-log"' in html
+    js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    assert "/ask`" in js and "result.answer" in js
+    assert "answer.textContent = result.answer" in js  # model output is rendered as text, never as markup

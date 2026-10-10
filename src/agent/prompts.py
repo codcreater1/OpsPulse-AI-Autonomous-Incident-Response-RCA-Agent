@@ -146,6 +146,8 @@ _PROMPT_TAGS = (
     "HISTORICAL_INCIDENTS",
     "PREVIOUS_FEEDBACK",
     "PREVIOUS_ATTEMPT",
+    "INCIDENT_DATA",
+    "QUESTION",
 )
 _TAG_RE = re.compile(r"<\s*/?\s*(?:" + "|".join(_PROMPT_TAGS) + r")\s*>", re.IGNORECASE)
 

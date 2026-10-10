@@ -99,6 +99,38 @@ Re-queue a `failed` incident (roles: reviewer, admin), e.g. after a provider quo
 | 409 | Conflict |
 | 422 | Validation Error |
 
+### `POST /incidents/{incident_id}/ask`
+
+Ask a question about one incident (roles: reporter, reviewer, admin).
+
+The answer is generated from the incident's stored record only, is stateless (no conversation memory), triggers
+no action, and names the sections it used. `grounded=false` means the model cited nothing from the record -
+treat such an answer with suspicion. It was not executed or verified.
+
+**Auth:** API key or Bearer token
+
+| Parameter | In | Type | Required | Description |
+|---|---|---|---|---|
+| `incident_id` | path | string | yes |  |
+
+**JSON body**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `question` | string | yes | A question about this incident's record |
+
+| Status | Meaning |
+|---|---|
+| 200 | Successful Response |
+| 401 | Missing or invalid API key |
+| 403 | Role not allowed, repository not allowed, or self-approval |
+| 503 | Database unavailable or authentication not configured |
+| 404 | Not Found |
+| 429 | Question rate limit exceeded (see Retry-After) |
+| 502 | The LLM provider could not answer |
+| 504 | The LLM provider timed out |
+| 422 | Validation Error |
+
 ## Remediation decisions
 
 ### `POST /incidents/{incident_id}/remediation/decision`

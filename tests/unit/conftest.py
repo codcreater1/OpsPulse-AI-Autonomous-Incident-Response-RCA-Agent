@@ -42,7 +42,7 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from src.agent.graph import build_graph  # noqa: E402
-from src.api.auth import submission_limiter  # noqa: E402
+from src.api.auth import ask_limiter, submission_limiter  # noqa: E402
 from src.config import settings  # noqa: E402
 from src.db import repositories  # noqa: E402
 from src.db.client import get_engine  # noqa: E402
@@ -59,6 +59,7 @@ REVIEWER_HEADERS = {"X-API-Key": "reviewer-key"}  # bob
 @pytest.fixture(autouse=True)
 def fresh_limiter():
     submission_limiter.reset()
+    ask_limiter.reset()
     yield
 
 

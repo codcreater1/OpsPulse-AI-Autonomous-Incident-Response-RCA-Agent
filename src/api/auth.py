@@ -92,6 +92,7 @@ class SlidingWindowLimiter:
 
 
 submission_limiter = SlidingWindowLimiter()
+ask_limiter = SlidingWindowLimiter()  # separate budget: questions cost LLM tokens
 
 
 def rate_limited_reporter(principal: Annotated[Principal, Depends(require_role("reporter", "reviewer"))]) -> Principal:
@@ -100,6 +101,17 @@ def rate_limited_reporter(principal: Annotated[Principal, Depends(require_role("
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
             "rate limit exceeded",
+            headers={"Retry-After": str(max(1, int(retry_after) + 1))},
+        )
+    return principal
+
+
+def rate_limited_asker(principal: Annotated[Principal, Depends(require_role("reporter", "reviewer"))]) -> Principal:
+    retry_after = ask_limiter.check(principal.name, settings.ask_rate_limit_per_minute)
+    if retry_after is not None:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "question rate limit exceeded",
             headers={"Retry-After": str(max(1, int(retry_after) + 1))},
         )
     return principal

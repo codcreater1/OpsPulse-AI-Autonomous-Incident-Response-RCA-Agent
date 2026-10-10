@@ -160,6 +160,24 @@
         <div id="d-patch" class="diff" role="region" aria-label="Proposed patch" tabindex="0"></div>
       </article>
 
+      <article id="ask" class="card ask" aria-labelledby="ask-title">
+        <div class="section-head">
+          <h2 id="ask-title">Ask about this incident</h2>
+          <span class="chip">grounded &middot; read-only</span>
+        </div>
+        <p class="muted small">Answers come only from this incident's stored record, name the sections they used and
+          are not executed or verified. Each question stands alone (no memory), and it can never approve or change
+          anything.</p>
+        <div id="ask-chips" class="chips"></div>
+        <form id="ask-form" class="ask-form" autocomplete="off">
+          <label for="ask-input" class="sr-only">Question</label>
+          <input id="ask-input" type="text" minlength="3" maxlength="500" required
+            placeholder="Ask about the evidence, the gate result or the patch">
+          <button type="submit" id="ask-send" class="btn primary">Ask</button>
+        </form>
+        <ol id="ask-log" class="ask-log" aria-live="polite"></ol>
+      </article>
+
       <details class="card reported">
         <summary>Reported error <span class="muted">(untrusted input, shown as plain text)</span></summary>
         <pre id="d-error" class="raw"></pre>

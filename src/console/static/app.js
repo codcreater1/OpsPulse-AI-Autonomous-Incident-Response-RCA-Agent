@@ -16,7 +16,7 @@ const STATUS_TONE = {
 
 const $ = (id) => document.getElementById(id);
 const state = {
-  cursor: null, items: [], current: null, evidenceFilter: "all", loading: false, focusIndex: -1, memoryKey: "",
+  askFor: null, cursor: null, items: [], current: null, evidenceFilter: "all", loading: false, focusIndex: -1, memoryKey: "",
 };
 
 // ------------------------------------------------------------------ small helpers
@@ -364,6 +364,7 @@ function renderDetail(incident) {
   $("d-error").textContent = incident.error_message || "";
 
   $("retry").hidden = incident.status !== "failed";
+  renderAsk(incident);
   const pending = incident.pending_approval;
   $("approval").hidden = !pending;
   if (pending) $("a-sha").textContent = pending.patch_sha256;
@@ -493,6 +494,74 @@ function renderDiff(patch) {
     const row = el("div", null, `row ${kind}`);
     row.append(el("span", left, "ln"), el("span", right, "ln"), el("span", text, "code"));
     view.append(row);
+  }
+}
+
+// ------------------------------------------------------------------ ask about this incident
+
+function suggestedQuestions(incident) {
+  const analysis = incident.analysis || {};
+  const accepted = incident.status === "analysis_ready" || incident.status === "awaiting_approval"
+    || incident.status === "pr_created";
+  const questions = [accepted ? "Why did the quality gate accept this analysis?"
+    : "Why was this analysis not accepted by the gate?"];
+  questions.push("What should I check first before trusting this diagnosis?");
+  questions.push("How could this diagnosis be wrong?");
+  if (incident.suggested_patch) questions.push("Explain what the patch changes and what it does not prove.");
+  if ((analysis.uncertainties || []).length) questions.push("Which uncertainties matter most?");
+  return questions;
+}
+
+function renderAsk(incident) {
+  if (state.askFor === incident.incident_id) return; // keep the transcript while the incident is re-rendered
+  state.askFor = incident.incident_id;
+  $("ask-log").replaceChildren();
+  const chips = $("ask-chips");
+  chips.replaceChildren();
+  for (const question of suggestedQuestions(incident)) {
+    const button = el("button", question, "chip-btn");
+    button.type = "button";
+    button.addEventListener("click", () => ask(question));
+    chips.append(button);
+  }
+}
+
+function setAskBusy(busy) {
+  $("ask-send").disabled = busy;
+  $("ask-input").disabled = busy;
+  document.querySelectorAll("#ask-chips .chip-btn").forEach((b) => { b.disabled = busy; });
+}
+
+async function ask(question) {
+  const incident = state.current;
+  const text = String(question || "").trim();
+  if (!incident || text.length < 3) return;
+  const log = $("ask-log");
+  log.append(el("li", text, "ask-item ask-q"));
+  const answer = el("li", "Reading the incident record…", "ask-item ask-a pending");
+  log.append(answer);
+  setAskBusy(true);
+  try {
+    const result = await api(`/incidents/${encodeURIComponent(incident.incident_id)}/ask`, {
+      method: "POST", body: JSON.stringify({ question: text }),
+    });
+    answer.className = "ask-item ask-a";
+    answer.textContent = result.answer;
+    const meta = el("div", null, "ask-meta");
+    if (!result.answerable) meta.append(el("span", "not in the record", "chip warn"));
+    else if (!result.grounded) meta.append(el("span", "cites nothing - treat with caution", "chip bad"));
+    for (const name of result.cited_sections || []) meta.append(el("span", name, "chip src"));
+    meta.append(el("span", `${result.model} · not executed or verified`, "muted"));
+    answer.append(meta);
+    $("ask-input").value = "";
+  } catch (error) {
+    answer.className = "ask-item ask-a error";
+    answer.textContent = error.status === 429 ? "Too many questions - wait a moment and try again."
+      : error.status === 503 ? "Questions are unavailable: the LLM is not configured or the database is down."
+      : error.message;
+  } finally {
+    setAskBusy(false);
+    answer.scrollIntoView({ block: "nearest" });
   }
 }
 
@@ -633,6 +702,10 @@ document.addEventListener("DOMContentLoaded", () => {
   $("approve").addEventListener("click", () => decide("approve"));
   $("reject").addEventListener("click", () => decide("reject"));
   $("retry").addEventListener("click", retry);
+  $("ask-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    ask($("ask-input").value);
+  });
   $("copy-id").addEventListener("click", () => state.current && copyText(state.current.incident_id, "Incident id"));
   $("copy-patch").addEventListener("click", () => state.current && copyText(state.current.suggested_patch || "", "Patch"));
   $("download-patch").addEventListener("click", downloadPatch);

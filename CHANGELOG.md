@@ -11,6 +11,9 @@ All notable changes are listed here. Versions of behaviour-critical components a
   Motivated by `ho-off-by-one` (right diagnosis, three diffs that never applied). Not yet measured live.
 
 ### Added
+- `POST /incidents/{id}/ask` and a console card: grounded, stateless, read-only question answering over one
+  incident's stored record (cited sections, `grounded` / `answerable` flags, per-identity rate limit,
+  `ASK_ENABLED`). Answer quality is not evaluated beyond unit tests.
 - Held-out evaluation, second live session (prompt v5, gate v6): 3 more cases; no false acceptance, one case
   with a correct diagnosis but a patch that never applied. Reports in `evals/results/`.
 - `docs/API.md`: API reference generated from the OpenAPI schema (`python -m scripts.export_api_docs`);
