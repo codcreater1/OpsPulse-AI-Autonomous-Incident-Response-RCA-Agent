@@ -5,6 +5,11 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Changed
+- `quality-gate-v7`: when a diff does not apply, the retry feedback quotes the closest real source lines with their
+  line numbers and indentation. Matching is unchanged (still strict); only the explanation is more precise.
+  Motivated by `ho-off-by-one` (right diagnosis, three diffs that never applied). Not yet measured live.
+
 ### Added
 - Held-out evaluation, second live session (prompt v5, gate v6): 3 more cases; no false acceptance, one case
   with a correct diagnosis but a patch that never applied. Reports in `evals/results/`.

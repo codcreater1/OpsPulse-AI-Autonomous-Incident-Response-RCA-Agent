@@ -403,6 +403,9 @@ separately, not merged:
 So, on held-out cases: no false acceptance so far, and one honest weakness - for `ho-off-by-one` the diagnosis was
 right while every proposed diff failed `diff_applies`, i.e. the agent did not produce a usable patch. The
 `rca-callers-v2` set could not be run live (quota), so `fix_location` still has no live evidence.
+`quality-gate-v7` responds to that weakness: when a diff does not apply, the retry feedback now quotes the closest
+real lines of the file with their line numbers and indentation (matching itself stays strict). It is unit-tested but
+**not yet measured live**.
 
 What the first live run showed, and what changed:
 

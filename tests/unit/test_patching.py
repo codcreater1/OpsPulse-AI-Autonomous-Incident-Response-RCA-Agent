@@ -53,3 +53,32 @@ def test_second_file_header_after_a_hunk_is_not_misread_as_removed_line():
     parsed = parse_unified_diff(two_files)
     assert parsed.file_count == 2 and len(parsed.hunks) == 2
     assert all(text != "-- a/src/b.py" for hunk in parsed.hunks for _, text in hunk.ops)
+
+
+def test_unapplied_hunk_names_the_closest_real_lines_without_loosening_the_match():
+    source = [
+        "def total(items):",
+        "    result = 0",
+        "    for item in items:",
+        "        result += item.price",
+        "    return result",
+    ]
+    # the model changed the indentation of a context line and dropped nothing else
+    diff = (
+        "--- a/m.py\n+++ b/m.py\n@@ -2,3 +2,3 @@\n"
+        "      result = 0\n"
+        "      for item in items:\n"
+        "-        result += item.price\n"
+        "+        result += item.price * item.qty\n"
+    )
+    parsed = parse_unified_diff(diff)
+    with pytest.raises(PatchError) as info:
+        apply_hunks(source, parsed.hunks)
+    message = str(info.value)
+    assert "were not found" in message and "Closest lines in the source" in message
+    assert "L2: '    result = 0'" in message  # the real line, with its real number and indentation
+    # the same hunk with the exact indentation applies
+    ok = parse_unified_diff(
+        diff.replace("      result = 0", "     result = 0").replace("      for item", "     for item")
+    )
+    assert apply_hunks(source, ok.hunks)[3] == "        result += item.price * item.qty"

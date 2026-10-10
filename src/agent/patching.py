@@ -6,6 +6,7 @@ Developer 2's GitHub integration (to apply the very same patch to the full file)
 
 from __future__ import annotations
 
+import difflib
 import re
 from dataclasses import dataclass, field
 
@@ -139,6 +140,27 @@ def _find(lines: list[str], block: list[str], start: int, expected: int) -> int 
     return min(hits, key=lambda i: abs(i - expected))
 
 
+def _closest_lines(lines: list[str], block: list[str], first_number: int) -> str:
+    """The window of `lines` most similar to the hunk's expected lines, quoted with real line numbers.
+
+    Used only to make the retry feedback precise ("you wrote X, the file has Y"); matching stays strict.
+    """
+    size = len(block)
+    if size == 0 or len(lines) < size:
+        return ""
+    wanted = [text.strip() for text in block]
+    best_ratio, best_index = 0.0, 0
+    for i in range(len(lines) - size + 1):
+        ratio = sum(difflib.SequenceMatcher(None, lines[i + k].strip(), wanted[k]).ratio() for k in range(size)) / size
+        if ratio > best_ratio:
+            best_ratio, best_index = ratio, i
+    if best_ratio < 0.6:
+        return ""
+    shown = lines[best_index : best_index + size][:6]
+    quoted = " | ".join(f"L{first_number + best_index + k}: {text[:100]!r}" for k, text in enumerate(shown))
+    return f" Closest lines in the source - copy them exactly, including indentation: {quoted}"
+
+
 def apply_hunks(
     lines: list[str],
     hunks: list[Hunk],
@@ -160,7 +182,8 @@ def apply_hunks(
         idx = _find(work, old, cursor, hint + delta)
         if idx is None:
             raise PatchError(
-                f"hunk {number}: context/removed lines were not found in the source (first line: {old[0][:70]!r})"
+                f"hunk {number}: context/removed lines were not found in the source (first line: {old[0][:70]!r})."
+                + _closest_lines(work, old, line_offset + 1 - delta)
             )
         if positions is not None:
             positions.append(idx - delta + line_offset + 1)
