@@ -37,6 +37,9 @@ class ErrorCategory(StrEnum):
     GITHUB_UNAVAILABLE = "github_unavailable"
 
 
+# Provider failures that may succeed later; the queue retries them with backoff instead of failing the incident.
+TRANSIENT_CATEGORIES = frozenset({"llm_rate_limited", "llm_timeout", "llm_unavailable"})
+
 LLM_CATEGORY = {
     "not_configured": ErrorCategory.LLM_NOT_CONFIGURED,
     "model_unavailable": ErrorCategory.LLM_UNAVAILABLE,

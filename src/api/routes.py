@@ -188,3 +188,24 @@ def decide_remediation(
     except DatabaseUnavailableError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "database unavailable") from exc
     return IncidentResult(**row)
+
+
+@router.post(
+    "/incidents/{incident_id}/retry",
+    response_model=IncidentResult,
+    tags=["incidents"],
+    responses={**_ERRORS, 404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
+)
+def retry_incident(
+    incident_id: uuid.UUID, principal: Annotated[Principal, Depends(require_role("reviewer"))]
+) -> IncidentResult:
+    """Re-queue a `failed` incident (roles: reviewer, admin), e.g. after a provider quota reset."""
+    try:
+        row = incident_service.retry_incident(incident_id, principal.name)
+    except IncidentNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "incident not found") from exc
+    except IncidentConflictError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except DatabaseUnavailableError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "database unavailable") from exc
+    return IncidentResult(**row)

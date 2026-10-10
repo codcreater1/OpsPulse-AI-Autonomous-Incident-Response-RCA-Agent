@@ -38,7 +38,7 @@ from src.agent.parsing import compute_fingerprint
 from src.agent.state import IncidentState, initial_state
 from src.config import settings
 from src.db import repositories
-from src.errors import ErrorCategory
+from src.errors import TRANSIENT_CATEGORIES, ErrorCategory
 from src.integrations import github
 from src.integrations.notify import notify_incident
 from src.integrations.observability import build_run_config, flush_traces, incident_trace
@@ -89,6 +89,44 @@ def _final_status(final: IncidentState) -> tuple[str, str, str | None]:
     decision = ((final["root_cause_analysis"] or {}).get("evaluation") or {}).get("decision")
     category = final["error_category"] or ErrorCategory.RETRY_BUDGET_EXHAUSTED.value
     return "needs_review", decision or "analysis did not pass the quality gate", category
+
+
+def _defer_transient(incident_id: uuid.UUID, claim_token: str, category: str | None) -> bool:
+    """Re-queue with exponential backoff (1, 2, 4 ... min, max 15) instead of failing on a transient error."""
+    if category not in TRANSIENT_CATEGORIES:
+        return False
+    try:
+        row = repositories.get_incident(incident_id)
+        attempts = row["job_attempts"] if row else settings.max_transient_retries
+        if attempts >= settings.max_transient_retries:
+            return False
+        delay = timedelta(seconds=min(60 * 2 ** max(attempts - 1, 0), 900))
+        repositories.defer_incident(
+            incident_id,
+            claim_token,
+            delay,
+            f"{category}: retrying in {int(delay.total_seconds())}s "
+            f"(claim {attempts}/{settings.max_transient_retries})",
+            category,
+        )
+    except SQLAlchemyError as exc:
+        raise DatabaseUnavailableError("database unavailable") from exc
+    logger.warning("transient failure %s: re-queued with %ss backoff", category, int(delay.total_seconds()))
+    metrics.JOBS_DEFERRED.labels(category).inc()
+    return True
+
+
+def retry_incident(incident_id: uuid.UUID, actor: str) -> dict[str, Any]:
+    """Manual retry of a failed incident (e.g. after fixing a provider key or once a quota resets)."""
+    try:
+        if repositories.get_incident(incident_id) is None:
+            raise IncidentNotFoundError("incident not found")
+        if not repositories.requeue_failed(incident_id, f"re-queued by {actor}"):
+            raise IncidentConflictError("only failed incidents can be retried")
+    except SQLAlchemyError as exc:
+        raise DatabaseUnavailableError("database unavailable") from exc
+    logger.info("incident %s re-queued by %s", incident_id, actor)
+    return _load(incident_id)
 
 
 def _fix_from_state(incident_id: uuid.UUID, fingerprint: str, final: IncidentState) -> ProposedFix:
@@ -145,7 +183,8 @@ def run_incident_pipeline(
                 trace.update(error="claim_lost")
                 return _load(incident_id)
             metrics.PIPELINE_SECONDS.observe(time.perf_counter() - started)
-            metrics.record_incident(result["status"], result["error_category"])
+            if result["status"] != "queued":  # a deferred retry has not finished yet
+                metrics.record_incident(result["status"], result["error_category"])
             trace.update(
                 output={"status": result["status"], "quality_score": result["quality_score"]},
                 metadata={"attempts": result["iterations"], "error_category": result["error_category"]},
@@ -202,6 +241,8 @@ def _run(
         _persist_or_raise(incident_id, claim_token=claim_token, **_outcome_fields(outcome))
     else:
         status, reason, category = _final_status(final)
+        if status == "failed" and claim_token and _defer_transient(incident_id, claim_token, category):
+            return _load(incident_id)
         _persist_or_raise(
             incident_id, claim_token=claim_token, status=status, status_reason=redact(reason), error_category=category
         )

@@ -43,7 +43,7 @@ which waits for an **explicit human approval** and is never merged automatically
 | Persistence | PostgreSQL/Neon via SQLAlchemy 2, Alembic migrations, failure taxonomy (`error_category`) |
 | Observability | Structured JSON logs with incident correlation and secret redaction; Langfuse v4 traces with content masking by default; Prometheus `/metrics` (content-free labels) |
 | Evaluation | 26-case synthetic RCA dataset, deterministic metrics, mock and live modes; labelled retrieval dataset comparing two ranking strategies |
-| Delivery | 210 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
+| Delivery | 216 offline unit tests (SQLite locally, PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
 
 ## Architecture
 
@@ -109,6 +109,12 @@ If a worker dies, the lease expires and the incident is queued again; after
 `MAX_JOB_ATTEMPTS` claims it fails as `interrupted`. The same mechanism works on PostgreSQL and SQLite, and any
 number of workers can run.
 
+**Transient provider errors are retried, not failed.** When an analysis stops on `llm_rate_limited`,
+`llm_timeout` or `llm_unavailable`, the incident goes back to the queue with `available_at` set to an
+exponential backoff (1, 2, 4 ... minutes, at most 15) and is failed only after `MAX_TRANSIENT_RETRIES` claims.
+Permanent errors (invalid key, missing configuration) fail immediately. Reviewers can re-queue any `failed`
+incident with `POST /incidents/{id}/retry` or the console's *Retry* button.
+
 **Why no LangGraph checkpointer:** the graph runs to completion inside one worker claim (seconds to minutes). The
 only long pause - waiting for a human - happens *after* the graph, and everything needed to resume (analysis,
 patch, pending approval) is already persisted in PostgreSQL. A checkpointer would add a second source of
@@ -135,7 +141,7 @@ Persisted incident `status` (with `error_category` explaining partial results / 
 |---|---|
 | `queued` | accepted, waiting for a worker |
 | `processing` | claimed by a worker (lease), analysis running |
-| `failed` | no usable analysis (`llm_*`, `internal_error`, `interrupted` - workers stopped mid-analysis `MAX_JOB_ATTEMPTS` times) |
+| `failed` | no usable analysis after retries; re-queue with `POST /incidents/{id}/retry` - (`llm_*`, `internal_error`, `interrupted` - workers stopped mid-analysis `MAX_JOB_ATTEMPTS` times) |
 | `needs_review` | analysis stored but not accepted (`retry_budget_exhausted`, `insufficient_evidence`, `no_code_fix`, `source_unavailable`, `malformed_model_output`, `remediation_policy_violation`) |
 | `analysis_ready` | accepted; remediation disabled or no token (`remediation_skipped`) |
 | `awaiting_approval` | accepted; a PR proposal waits for a human decision |
@@ -409,6 +415,7 @@ unit tests with a fake client.
 | `opspulse_queue_depth` | gauge | - (sampled by the worker) |
 | `opspulse_jobs_recovered_total` | counter | `outcome` (requeued / failed) |
 | `opspulse_notifications_total` | counter | `outcome` (sent / failed) |
+| `opspulse_jobs_deferred_total` | counter | `error_category` (transient provider errors) |
 
 Labels never contain repository names, identities, paths or error text. Counters are per process.
 Example alert rules: [`deploy/prometheus/alerts.yml`](deploy/prometheus/alerts.yml) (validated with `promtool`
@@ -515,7 +522,7 @@ stack traces or connection strings. Re-sending a request with the same `incident
 ## Testing and CI
 
 ```bash
-pytest                               # 210 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
+pytest                               # 216 offline unit tests (SQLite, fakes for Groq/GitHub/Langfuse)
 pytest --cov=src --cov=evals         # coverage (87% total at time of writing)
 ruff check src tests evals scripts migrations && ruff format --check src tests evals scripts migrations
 mypy                                 # src/

@@ -168,6 +168,7 @@ function renderDetail(incident) {
   }
 
   renderDiff(incident.suggested_patch);
+  $("retry").hidden = incident.status !== "failed";
   const pending = incident.pending_approval;
   $("approval").hidden = !pending;
   if (pending) $("a-sha").textContent = pending.patch_sha256;
@@ -190,6 +191,22 @@ function renderDiff(patch) {
     else if (line.startsWith("+") && !line.startsWith("+++")) cls = "add";
     else if (line.startsWith("-") && !line.startsWith("---")) cls = "del";
     pre.append(el("span", line || " ", cls));
+  }
+}
+
+async function retry() {
+  const incident = state.current;
+  if (!incident) return;
+  $("retry").disabled = true;
+  try {
+    const updated = await api(`/incidents/${encodeURIComponent(incident.incident_id)}/retry`, { method: "POST" });
+    state.current = updated;
+    renderDetail(updated);
+    setMessage("a-message", "Re-queued: a worker will analyse it again.");
+  } catch (error) {
+    setMessage("a-message", error.message, true);
+  } finally {
+    $("retry").disabled = false;
   }
 }
 
@@ -236,6 +253,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("back").addEventListener("click", () => { $("detail-view").hidden = true; $("list-view").hidden = false; loadList(); });
   $("approve").addEventListener("click", () => decide("approve"));
   $("reject").addEventListener("click", () => decide("reject"));
+  $("retry").addEventListener("click", retry);
   $("forget-key").hidden = !apiKey();
   loadList();
 });

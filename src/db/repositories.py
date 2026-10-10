@@ -49,6 +49,7 @@ def incident_to_dict(row: Incident) -> dict[str, Any]:
         "error_message": row.error_message,
         "submitted_by": row.submitted_by,
         "job_attempts": row.job_attempts,
+        "available_at": _iso(_aware(row.available_at)) if row.available_at else None,
         "affected_file": row.affected_file,
         "quality_score": row.quality_score,
         "iterations": row.iterations,
@@ -284,9 +285,60 @@ def renew_lease(incident_id: uuid.UUID, claim_token: str, lease: timedelta) -> b
         return result.rowcount == 1
 
 
+def defer_incident(incident_id: uuid.UUID, claim_token: str, delay: timedelta, reason: str, category: str) -> None:
+    """Give a claimed incident back to the queue, not claimable before now + delay (transient failures)."""
+    now = datetime.now(UTC)
+    with session_scope() as session:
+        result: CursorResult[Any] = session.execute(  # type: ignore[assignment]
+            update(Incident)
+            .where(Incident.id == incident_id, Incident.status == "processing", Incident.claim_token == claim_token)
+            .values(
+                status="queued",
+                available_at=now + delay,
+                lease_expires_at=None,
+                claim_token=None,
+                status_reason=reason,
+                error_category=category,
+                updated_at=now,
+            )
+        )
+        if result.rowcount != 1:
+            raise ClaimLostError(f"claim on incident {incident_id} was lost")
+
+
+def requeue_failed(incident_id: uuid.UUID, reason: str) -> bool:
+    """Manual retry: put a `failed` incident back in the queue with a fresh claim budget."""
+    now = datetime.now(UTC)
+    with session_scope() as session:
+        result: CursorResult[Any] = session.execute(  # type: ignore[assignment]
+            update(Incident)
+            .where(Incident.id == incident_id, Incident.status == "failed")
+            .values(
+                status="queued",
+                job_attempts=0,
+                available_at=None,
+                lease_expires_at=None,
+                claim_token=None,
+                status_reason=reason,
+                error_category=None,
+                updated_at=now,
+            )
+        )
+        return result.rowcount == 1
+
+
 def claim_next(lease: timedelta, scan: int = 10) -> dict[str, Any] | None:
     """Claim the oldest queued incident. Returns the job (id, repo, error, trace, attempts) or None if empty."""
-    stmt = select(Incident.id).where(Incident.status == "queued").order_by(Incident.created_at).limit(scan)
+    now = datetime.now(UTC)
+    stmt = (
+        select(Incident.id)
+        .where(
+            Incident.status == "queued",
+            or_(Incident.available_at.is_(None), Incident.available_at <= now),
+        )
+        .order_by(Incident.created_at)
+        .limit(scan)
+    )
     with session_scope() as session:
         candidates = list(session.scalars(stmt))
     for incident_id in candidates:  # another worker may win a race for any single row; try the next one

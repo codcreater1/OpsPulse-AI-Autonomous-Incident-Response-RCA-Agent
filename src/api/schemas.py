@@ -87,6 +87,7 @@ class IncidentResult(BaseModel):
     error_message: str
     submitted_by: str | None = Field(None, description="Authenticated identity that submitted the incident")
     job_attempts: int = Field(0, description="How many times a worker claimed this incident")
+    available_at: str | None = Field(None, description="Deferred retry: not picked up by a worker before this time")
     affected_file: str | None = None
     quality_score: float = Field(description="Deterministic rubric score (0-1). Not a probability of correctness.")
     iterations: int = Field(description="Number of completed LLM analysis attempts")

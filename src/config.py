@@ -146,6 +146,8 @@ class Settings:
     worker_poll_seconds: float = field(default_factory=lambda: _number(("WORKER_POLL_SECONDS",), 1.0, float, 0.1, 60))
     job_lease_seconds: int = field(default_factory=lambda: int(_number(("JOB_LEASE_SECONDS",), 300, int, 30, 86_400)))
     max_job_attempts: int = field(default_factory=lambda: int(_number(("MAX_JOB_ATTEMPTS",), 2, int, 1, 10)))
+    # Claims allowed for incidents that keep hitting transient provider errors (rate limit, timeout, outage).
+    max_transient_retries: int = field(default_factory=lambda: int(_number(("MAX_TRANSIENT_RETRIES",), 3, int, 0, 10)))
     allowed_repositories: frozenset[str] = field(default_factory=lambda: _repo_list("ALLOWED_REPOSITORIES"))
 
     # --- GitHub ---

@@ -26,6 +26,9 @@ LLM_TOKENS = Counter("opspulse_llm_tokens_total", "Provider-reported tokens", ["
 QUALITY_GATE = Counter("opspulse_quality_gate_evaluations_total", "Quality-gate decisions", ["result"])
 QUEUE_DEPTH = Gauge("opspulse_queue_depth", "Incidents waiting in the queue (sampled by the worker)")
 JOBS_RECOVERED = Counter("opspulse_jobs_recovered_total", "Expired worker claims", ["outcome"])
+JOBS_DEFERRED = Counter(
+    "opspulse_jobs_deferred_total", "Incidents re-queued with backoff after a transient error", ["error_category"]
+)
 NOTIFICATIONS = Counter("opspulse_notifications_total", "Reviewer notifications", ["outcome"])
 DECISIONS = Counter("opspulse_remediation_decisions_total", "Human remediation decisions", ["decision"])
 

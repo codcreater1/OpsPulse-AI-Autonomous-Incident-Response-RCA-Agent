@@ -6,6 +6,8 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Added
+- Transient provider errors (rate limit, timeout, outage) re-queue the incident with exponential backoff
+  (migration 0006 `available_at`); `POST /incidents/{id}/retry` and a console *Retry* button for failed incidents.
 - Reviewer notifications to an https incoming webhook (Slack/Mattermost format) for selected statuses;
   content-free messages, failures never affect processing.
 - `python -m evals.merge_reports`: merge partial runs of the same configuration (refuses mismatched versions).

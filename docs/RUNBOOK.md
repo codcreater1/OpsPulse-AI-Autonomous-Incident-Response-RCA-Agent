@@ -30,8 +30,10 @@ Symptom: incidents end as `failed` with `error_category` `llm_rate_limited`, `ll
 - `llm_unavailable` with `model_unavailable` in the reason: the model was retired - set `MODEL_NAME`, run
   `python -m evals.run_rca --mode live` against the new model **before** switching production, bump nothing
   else.
-- `llm_rate_limited`: reduce worker count or request a higher quota. The loop never retries provider errors;
-  re-submit affected incidents once the limit clears.
+- `llm_rate_limited`, `llm_timeout`, `llm_unavailable` are transient: the incident is re-queued with backoff
+  (watch `opspulse_jobs_deferred_total`) and fails only after `MAX_TRANSIENT_RETRIES` claims. If the quota is
+  exhausted for longer (e.g. a daily token limit), reduce worker count or upgrade the tier, then re-queue the
+  failed incidents with `POST /incidents/{id}/retry` (or the console's *Retry* button).
 
 ## Model output quality
 
@@ -45,7 +47,7 @@ Symptom: rising `malformed` / `schema_invalid` attempts or falling gate acceptan
 A worker that dies leaves its incident `processing`; when the lease (`JOB_LEASE_SECONDS`) expires another worker
 re-queues it. After `MAX_JOB_ATTEMPTS` claims it becomes `failed / interrupted`. Repeated interruptions usually
 mean the container is OOM-killed or restarted mid-analysis - check container exits and memory limits.
-To retry an interrupted incident, submit it again (a new `incident_id`).
+To retry an interrupted incident, use `POST /incidents/{id}/retry` (reviewer or admin) or the console.
 
 ## PR creation fails
 
