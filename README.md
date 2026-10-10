@@ -255,6 +255,12 @@ explicitly, and the schema normalises unrecognised sources on *unverified* (infe
 | evidence_grounding_accuracy | 1.00 (52/52) |
 | average attempts per case | 1.31 |
 
+**Held-out set** (`--dataset holdout`, 12 cases written before any model run on them): the first live run was
+cut short by the free-tier daily token quota after 6 cases. On those 6 the model was correct in all of them
+(category 6/6, quotes 13/13, 1 attempt each). The 6 not yet evaluated include the deploy-drift case and both
+inconclusive cases, so this is **not yet evidence that the gains generalise**; the run will be completed when the
+quota resets ([partial report](evals/results/rca-holdout-live-2026-10-10-prompt-v4-gate-v4-partial.md)).
+
 What the first live run showed, and what changed:
 
 - **The model did not fabricate evidence**: every "observed" quote was verbatim in the retrieved data (50/50).
