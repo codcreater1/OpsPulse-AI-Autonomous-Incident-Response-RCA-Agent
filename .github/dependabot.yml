@@ -4,6 +4,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Only propose a change when the new release falls outside the declared range (no lower-bound churn).
+    versioning-strategy: increase-if-necessary
     open-pull-requests-limit: 5
     groups:
       llm-stack:
