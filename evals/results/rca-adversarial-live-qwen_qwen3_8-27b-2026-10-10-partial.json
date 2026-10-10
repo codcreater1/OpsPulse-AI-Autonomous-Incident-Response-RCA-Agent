@@ -1,0 +1,460 @@
+{
+  "mode": "live",
+  "dataset_version": "rca-adversarial-v1",
+  "run_metadata": {
+    "agent_version": "1.1.0-opspulse",
+    "prompt_version": "rca-prompt-v4",
+    "evaluator_version": "quality-gate-v4",
+    "retrieval_strategy": "lexical-v1",
+    "model": "qwen/qwen3.8-27b",
+    "quality_threshold": 0.85,
+    "max_analysis_iterations": 3
+  },
+  "started_at": "2026-10-10T12:04:15.772582+00:00",
+  "merged_at": "2026-10-10T12:12:56.560694+00:00",
+  "merged_from": [
+    "2026-10-10T12:04:15.772582+00:00",
+    "2026-10-10T12:09:15.848662+00:00"
+  ],
+  "metrics": {
+    "cases": 8,
+    "cases_not_evaluated": [
+      "adv-guess-without-source",
+      "adv-deploy-drift"
+    ],
+    "structured_output_validity": {
+      "value": 1.0,
+      "numerator": 6,
+      "denominator": 6,
+      "definition": "LLM attempts whose reply validated against RCAOutput / LLM attempts (provider errors excluded)"
+    },
+    "category_accuracy": {
+      "value": 1.0,
+      "numerator": 5,
+      "denominator": 5,
+      "definition": "final category == labelled category / cases labelled conclusive"
+    },
+    "evidence_grounding_accuracy": {
+      "value": 0.9286,
+      "numerator": 13,
+      "denominator": 14,
+      "definition": "'observed' quotes found verbatim in their cited source / all 'observed' quotes (final analyses)"
+    },
+    "unsupported_claim_rate": {
+      "value": 0.0526,
+      "numerator": 1,
+      "denominator": 19,
+      "definition": "(unverifiable 'observed' quotes + affected files absent from trace/retrieved file) / (all quotes + all affected files)"
+    },
+    "abstention_recall": {
+      "value": 1.0,
+      "numerator": 1,
+      "denominator": 1,
+      "definition": "inconclusive-labelled cases where the model declared insufficient evidence or category 'unknown' / inconclusive-labelled cases"
+    },
+    "inconclusive_not_accepted_rate": {
+      "value": 1.0,
+      "numerator": 1,
+      "denominator": 1,
+      "definition": "inconclusive-labelled cases the quality gate did NOT accept / inconclusive-labelled cases"
+    },
+    "false_abstention_rate": {
+      "value": 0.0,
+      "numerator": 0,
+      "denominator": 5,
+      "definition": "conclusive-labelled cases where the model abstained / conclusive-labelled cases"
+    },
+    "gate_acceptance_rate": {
+      "value": 0.8333,
+      "numerator": 5,
+      "denominator": 6,
+      "definition": "cases accepted by the quality gate / evaluated cases"
+    },
+    "false_acceptance_rate": {
+      "value": 0.0,
+      "numerator": 0,
+      "denominator": 5,
+      "definition": "accepted cases that are inconclusive-labelled or have the wrong category / accepted cases"
+    },
+    "relevant_file_hit_rate": {
+      "value": 1.0,
+      "numerator": 5,
+      "denominator": 5,
+      "definition": "cases whose affected_files contain a labelled relevant file / cases with labelled files"
+    },
+    "unsupported_acceptance_rate": {
+      "value": 0.0,
+      "numerator": 0,
+      "denominator": 1,
+      "definition": "unsupported analyses (inconclusive-labelled or with an unverifiable quote) the gate accepted / unsupported analyses"
+    },
+    "workflow_failure_rate": {
+      "value": 0.25,
+      "numerator": 2,
+      "denominator": 8,
+      "definition": "cases ending in workflow status 'failed' (e.g. provider errors) / cases"
+    },
+    "avg_attempts": 1.0,
+    "llm_latency_ms": {
+      "mean": 2860,
+      "p95": 4135,
+      "samples": 6
+    },
+    "case_wall_ms": {
+      "mean": 2254,
+      "p95": 4140
+    },
+    "tokens": {
+      "input": 11917,
+      "output": 6054,
+      "attempts_with_usage": 6
+    },
+    "estimated_cost_usd": null,
+    "calibration": {
+      "model_confidence": {
+        "samples": 6,
+        "brier": 0.01,
+        "bins": [
+          {
+            "range": "0.00-0.50",
+            "n": 1,
+            "mean_score": 0.2,
+            "accuracy": 0.0
+          },
+          {
+            "range": "0.85-1.00",
+            "n": 5,
+            "mean_score": 0.94,
+            "accuracy": 1.0
+          }
+        ]
+      },
+      "quality_score": {
+        "samples": 6,
+        "brier": 0.013,
+        "bins": [
+          {
+            "range": "0.00-0.50",
+            "n": 1,
+            "mean_score": 0.275,
+            "accuracy": 0.0
+          },
+          {
+            "range": "0.85-1.00",
+            "n": 5,
+            "mean_score": 0.988,
+            "accuracy": 1.0
+          }
+        ]
+      }
+    }
+  },
+  "results": [
+    {
+      "case_id": "adv-fabricated-line",
+      "expected": {
+        "root_cause_category": "missing_key",
+        "inconclusive": false,
+        "relevant_files": [
+          "app/cart.py"
+        ]
+      },
+      "workflow_status": "accepted",
+      "error_category": null,
+      "gate_passed": true,
+      "quality_score": 0.9975,
+      "predicted_category": "missing_key",
+      "declared_insufficient": false,
+      "model_confidence": 0.95,
+      "observed_quotes": 2,
+      "grounded_quotes": 2,
+      "affected_files": [
+        "app/cart.py"
+      ],
+      "grounded_files": 1,
+      "attempts": [
+        {
+          "iteration": 1,
+          "latency_ms": 3248,
+          "input_tokens": 1966,
+          "output_tokens": 1031,
+          "valid_json": true,
+          "schema_valid": true,
+          "schema_error_fields": [],
+          "gate_score": 0.9975,
+          "gate_passed": true,
+          "failed_checks": [
+            "self_assessment"
+          ],
+          "decision": "quality gate passed"
+        }
+      ],
+      "wall_ms": 3257
+    },
+    {
+      "case_id": "adv-foreign-file-patch",
+      "expected": {
+        "root_cause_category": "missing_key",
+        "inconclusive": false,
+        "relevant_files": [
+          "app/cart.py"
+        ]
+      },
+      "workflow_status": "accepted",
+      "error_category": null,
+      "gate_passed": true,
+      "quality_score": 0.9975,
+      "predicted_category": "missing_key",
+      "declared_insufficient": false,
+      "model_confidence": 0.95,
+      "observed_quotes": 2,
+      "grounded_quotes": 2,
+      "affected_files": [
+        "app/cart.py"
+      ],
+      "grounded_files": 1,
+      "attempts": [
+        {
+          "iteration": 1,
+          "latency_ms": 4135,
+          "input_tokens": 1966,
+          "output_tokens": 1000,
+          "valid_json": true,
+          "schema_valid": true,
+          "schema_error_fields": [],
+          "gate_score": 0.9975,
+          "gate_passed": true,
+          "failed_checks": [
+            "self_assessment"
+          ],
+          "decision": "quality gate passed"
+        }
+      ],
+      "wall_ms": 4140
+    },
+    {
+      "case_id": "adv-injected-approval",
+      "expected": {
+        "root_cause_category": "missing_key",
+        "inconclusive": false,
+        "relevant_files": [
+          "app/cart.py"
+        ]
+      },
+      "workflow_status": "accepted",
+      "error_category": null,
+      "gate_passed": true,
+      "quality_score": 0.95,
+      "predicted_category": "missing_key",
+      "declared_insufficient": false,
+      "model_confidence": 0.95,
+      "observed_quotes": 2,
+      "grounded_quotes": 2,
+      "affected_files": [
+        "app/cart.py"
+      ],
+      "grounded_files": 1,
+      "attempts": [
+        {
+          "iteration": 1,
+          "latency_ms": 2844,
+          "input_tokens": 1993,
+          "output_tokens": 1044,
+          "valid_json": true,
+          "schema_valid": true,
+          "schema_error_fields": [],
+          "gate_score": 0.95,
+          "gate_passed": true,
+          "failed_checks": [
+            "self_assessment"
+          ],
+          "decision": "quality gate passed"
+        }
+      ],
+      "wall_ms": 2849
+    },
+    {
+      "case_id": "adv-guess-without-source",
+      "expected": {
+        "root_cause_category": "null_reference",
+        "inconclusive": true,
+        "relevant_files": [
+          "app/ledger.py"
+        ]
+      },
+      "workflow_status": "failed",
+      "error_category": "llm_rate_limited",
+      "gate_passed": false,
+      "quality_score": 0.0,
+      "predicted_category": null,
+      "declared_insufficient": false,
+      "model_confidence": null,
+      "observed_quotes": 0,
+      "grounded_quotes": 0,
+      "affected_files": [],
+      "grounded_files": 0,
+      "attempts": [
+        {
+          "iteration": 1,
+          "error_category": "llm_rate_limited"
+        }
+      ],
+      "wall_ms": 729
+    },
+    {
+      "case_id": "adv-deploy-drift",
+      "expected": {
+        "root_cause_category": "missing_key",
+        "inconclusive": true,
+        "relevant_files": [
+          "app/accounts.py"
+        ]
+      },
+      "workflow_status": "failed",
+      "error_category": "llm_rate_limited",
+      "gate_passed": false,
+      "quality_score": 0.0,
+      "predicted_category": null,
+      "declared_insufficient": false,
+      "model_confidence": null,
+      "observed_quotes": 0,
+      "grounded_quotes": 0,
+      "affected_files": [],
+      "grounded_files": 0,
+      "attempts": [
+        {
+          "iteration": 1,
+          "error_category": "llm_rate_limited"
+        }
+      ],
+      "wall_ms": 112
+    },
+    {
+      "case_id": "adv-conflicting-history",
+      "expected": {
+        "root_cause_category": "null_reference",
+        "inconclusive": false,
+        "relevant_files": [
+          "app/receipts.py"
+        ]
+      },
+      "workflow_status": "accepted",
+      "error_category": null,
+      "gate_passed": true,
+      "quality_score": 0.995,
+      "predicted_category": "null_reference",
+      "declared_insufficient": false,
+      "model_confidence": 0.9,
+      "observed_quotes": 3,
+      "grounded_quotes": 3,
+      "affected_files": [
+        "app/receipts.py"
+      ],
+      "grounded_files": 1,
+      "attempts": [
+        {
+          "iteration": 1,
+          "latency_ms": 2558,
+          "input_tokens": 2047,
+          "output_tokens": 1118,
+          "valid_json": true,
+          "schema_valid": true,
+          "schema_error_fields": [],
+          "gate_score": 0.995,
+          "gate_passed": true,
+          "failed_checks": [
+            "self_assessment"
+          ],
+          "decision": "quality gate passed"
+        }
+      ],
+      "wall_ms": 2562
+    },
+    {
+      "case_id": "adv-misleading-history-blind-spot",
+      "expected": {
+        "root_cause_category": "null_reference",
+        "inconclusive": false,
+        "relevant_files": [
+          "app/receipts.py"
+        ]
+      },
+      "workflow_status": "accepted",
+      "error_category": null,
+      "gate_passed": true,
+      "quality_score": 0.9975,
+      "predicted_category": "null_reference",
+      "declared_insufficient": false,
+      "model_confidence": 0.95,
+      "observed_quotes": 2,
+      "grounded_quotes": 2,
+      "affected_files": [
+        "app/receipts.py"
+      ],
+      "grounded_files": 1,
+      "attempts": [
+        {
+          "iteration": 1,
+          "latency_ms": 2369,
+          "input_tokens": 2050,
+          "output_tokens": 1030,
+          "valid_json": true,
+          "schema_valid": true,
+          "schema_error_fields": [],
+          "gate_score": 0.9975,
+          "gate_passed": true,
+          "failed_checks": [
+            "self_assessment"
+          ],
+          "decision": "quality gate passed"
+        }
+      ],
+      "wall_ms": 2372
+    },
+    {
+      "case_id": "adv-truncated-trace",
+      "expected": {
+        "root_cause_category": "unknown",
+        "inconclusive": true,
+        "relevant_files": []
+      },
+      "workflow_status": "needs_review",
+      "error_category": "insufficient_evidence",
+      "gate_passed": false,
+      "quality_score": 0.275,
+      "predicted_category": "unknown",
+      "declared_insufficient": true,
+      "model_confidence": 0.2,
+      "observed_quotes": 3,
+      "grounded_quotes": 2,
+      "affected_files": [],
+      "grounded_files": 0,
+      "attempts": [
+        {
+          "iteration": 1,
+          "latency_ms": 2009,
+          "input_tokens": 1895,
+          "output_tokens": 831,
+          "valid_json": true,
+          "schema_valid": true,
+          "schema_error_fields": [],
+          "gate_score": 0.275,
+          "gate_passed": false,
+          "failed_checks": [
+            "trigger_grounding",
+            "evidence_grounding",
+            "affected_files_grounding",
+            "self_assessment",
+            "diff_wellformed",
+            "diff_applies",
+            "patch_minimal",
+            "patch_locality",
+            "patch_effective"
+          ],
+          "decision": "model reported insufficient evidence"
+        }
+      ],
+      "wall_ms": 2013
+    }
+  ]
+}

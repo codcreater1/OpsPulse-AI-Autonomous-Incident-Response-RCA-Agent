@@ -34,6 +34,9 @@ Symptom: incidents end as `failed` with `error_category` `llm_rate_limited`, `ll
   (watch `opspulse_jobs_deferred_total`) and fails only after `MAX_TRANSIENT_RETRIES` claims. If the quota is
   exhausted for longer (e.g. a daily token limit), reduce worker count or upgrade the tier, then re-queue the
   failed incidents with `POST /incidents/{id}/retry` (or the console's *Retry* button).
+- `llm_request_too_large`: a single request exceeds a per-minute token cap of the tier (Groq answers 429
+  "Request too large", e.g. 1000 output tokens per minute for some models on the free tier). It is **not**
+  retried, because waiting cannot help: choose another model or tier.
 
 ## Model output quality
 

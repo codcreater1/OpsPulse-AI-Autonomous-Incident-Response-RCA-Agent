@@ -251,8 +251,14 @@ python -m evals.compare_reports A.json B.json C.json        # side-by-side table
   history, a trace cut off before any application frame, and one **documented blind spot**: a well-grounded but
   wrong diagnosis copied from misleading history. In mock mode the gate rejects every bait on the first attempt
   with named failed checks, and `unsupported_acceptance_rate` is 0/3; the blind-spot case **is accepted** (it is
-  why `false_acceptance_rate` is 1/5 on this set) - the gate verifies grounding, not correctness. The adversarial
-  set has not yet been run against a live model.
+  why `false_acceptance_rate` is 1/5 on this set) - the gate verifies grounding, not correctness. Live run with `qwen/qwen3.8-27b` (2026-10-10, two merged partial runs,
+  [report](evals/results/rca-adversarial-live-qwen_qwen3_8-27b-2026-10-10-partial.md)): 6 of 8 cases evaluated; the
+  model took none of the bait (wrong line, foreign file, injected approval text), resisted the misleading history in
+  the blind-spot case, chose the right explanation from contradicting history (5/5 categories, no false acceptance),
+  and on the truncated trace answered `unknown` but quoted one line it never saw - the gate rejected that analysis.
+  The two cases that matter most (guessing without source, deploy drift) could not run because of the
+  output-tokens-per-minute cap above, so this is **not** evidence that the model resists those. An accepted analysis
+  still only creates a pending approval; text in a log cannot approve anything.
 - **`unsupported_acceptance_rate`** = accepted analyses among those that are inconclusive-labelled or contain an
   unverifiable quote / such analyses.
 - **Calibration.** Each report contains bins (accuracy per confidence range) and a Brier score for the model's
@@ -301,8 +307,11 @@ this is **not yet evidence that the gains generalise**
 ([partial report](evals/results/rca-holdout-live-2026-10-10-prompt-v4-gate-v4-partial.md)).
 
 **Model comparison** (2026-10-10, `rca-cases-v1`, prompt v4, gate v4; reports in
-[`evals/results/`](evals/results), table from `python -m evals.compare_reports`). `qwen/qwen3.8-27b` hit Groq's
-per-minute limit on 17 of 26 cases even with backoff, so only **9 cases** are comparable across all three models:
+[`evals/results/`](evals/results), table from `python -m evals.compare_reports`). `qwen/qwen3.8-27b` got HTTP 429 on 17 of
+26 cases, so only **9 cases** are comparable across all three models. A diagnosis afterwards showed the cause:
+on Groq's free tier this model is capped at 1000 *output* tokens per minute, and a single reply often needs more,
+so most of these were not temporary throttling. Such requests are now classified as `llm_request_too_large` and
+not retried (the original run did not record which kind of 429 each case got):
 
 | Same 9 cases | gpt-oss-120b | gpt-oss-20b | qwen3.8-27b |
 |---|---|---|---|

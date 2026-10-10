@@ -54,6 +54,15 @@ def _error_code(exc: groq.APIStatusError) -> str | None:
     return code if isinstance(code, str) else None
 
 
+def _is_request_too_large(exc: groq.APIStatusError) -> bool:
+    """Groq answers 429 both for "slow down" and for a single request larger than a per-minute token cap
+    (e.g. a 1000 output-tokens-per-minute free-tier limit). Only the first one is worth retrying later."""
+    body = exc.body if isinstance(exc.body, dict) else {}
+    error = body.get("error", body)
+    message = error.get("message") if isinstance(error, dict) else None
+    return isinstance(message, str) and message.startswith("Request too large")
+
+
 @dataclass(frozen=True)
 class LLMReply:
     text: str
@@ -95,6 +104,8 @@ def invoke_json_model(
     except groq.NotFoundError as exc:
         raise LLMError("model_unavailable", f"model {settings.model_name!r} is unavailable") from exc
     except groq.RateLimitError as exc:
+        if _is_request_too_large(exc):
+            raise LLMError("request_too_large", "one request exceeds the provider's per-minute token limit") from exc
         raise LLMError("rate_limited", "the LLM provider rate limit was exceeded") from exc
     except groq.APITimeoutError as exc:
         raise LLMError("timeout", "the LLM provider timed out") from exc

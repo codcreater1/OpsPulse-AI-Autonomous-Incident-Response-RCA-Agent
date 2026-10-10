@@ -15,6 +15,7 @@ class ErrorCategory(StrEnum):
     LLM_NOT_CONFIGURED = "llm_not_configured"
     LLM_UNAVAILABLE = "llm_unavailable"
     LLM_RATE_LIMITED = "llm_rate_limited"
+    LLM_REQUEST_TOO_LARGE = "llm_request_too_large"  # one request exceeds a per-minute cap: waiting cannot help
     LLM_TIMEOUT = "llm_timeout"
     LLM_AUTH = "llm_auth"
     LLM_BAD_REQUEST = "llm_bad_request"
@@ -46,6 +47,7 @@ LLM_CATEGORY = {
     "connection": ErrorCategory.LLM_UNAVAILABLE,
     "provider_error": ErrorCategory.LLM_UNAVAILABLE,
     "rate_limited": ErrorCategory.LLM_RATE_LIMITED,
+    "request_too_large": ErrorCategory.LLM_REQUEST_TOO_LARGE,
     "timeout": ErrorCategory.LLM_TIMEOUT,
     "auth": ErrorCategory.LLM_AUTH,
     "bad_request": ErrorCategory.LLM_BAD_REQUEST,

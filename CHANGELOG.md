@@ -11,6 +11,7 @@ All notable changes are listed here. Versions of behaviour-critical components a
   regression for the tuning, holdout and adversarial datasets.
 - Live model comparison on `rca-cases-v1`: `openai/gpt-oss-20b` (26 cases) and `qwen/qwen3.8-27b` (9 of 26
   evaluated; the rest hit the provider rate limit) against `openai/gpt-oss-120b`; reports in `evals/results/`.
+- Live adversarial run with `qwen/qwen3.8-27b` (6 of 8 cases evaluated, no bait taken).
 - Adversarial dataset `rca-adversarial-v1` (8 cases, one documented blind spot) and the metric
   `unsupported_acceptance_rate`.
 - Calibration bins and Brier score for model self-assessed confidence and the gate quality score (reported as
@@ -56,6 +57,8 @@ All notable changes are listed here. Versions of behaviour-critical components a
 - MIT license, security policy, contributing guide, ADRs, pre-commit hooks, Dependabot.
 
 ### Fixed
+- A single request exceeding a per-minute token cap (Groq 429 "Request too large") was treated as a
+  transient rate limit and re-queued for nothing; it is now `llm_request_too_large` and fails immediately.
 - Report paths for model names containing a dot (e.g. `qwen3.8-27b`) were truncated by `Path.with_suffix`.
 - Default model `llama-3.3-70b-versatile` is no longer served by Groq; default is now `openai/gpt-oss-120b`.
 - CI: restored the `langchain` dependency required by Langfuse's LangChain handler; the handler is now imported

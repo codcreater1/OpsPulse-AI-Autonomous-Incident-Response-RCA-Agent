@@ -8,8 +8,8 @@ from src.integrations.llm import LLMError, invoke_json_model
 _REQUEST = httpx.Request("POST", "https://api.groq.test/openai/v1/chat/completions")
 
 
-def _status_error(cls, status, code=None):
-    body = {"error": {"code": code, "message": "x"}} if code else None
+def _status_error(cls, status, code=None, message="x"):
+    body = {"error": {"code": code, "message": message}} if code else None
     return cls("provider said no", response=httpx.Response(status, request=_REQUEST), body=body)
 
 
@@ -25,6 +25,14 @@ class Raising:
     "exc,category",
     [
         (_status_error(groq.RateLimitError, 429), "rate_limited"),
+        (
+            _status_error(groq.RateLimitError, 429, "rate_limit_exceeded", "Rate limit reached for model"),
+            "rate_limited",
+        ),
+        (
+            _status_error(groq.RateLimitError, 429, "rate_limit_exceeded", "Request too large for model `m` on OTPM"),
+            "request_too_large",
+        ),
         (_status_error(groq.AuthenticationError, 401), "auth"),
         (_status_error(groq.NotFoundError, 404), "model_unavailable"),
         (_status_error(groq.BadRequestError, 400, "model_decommissioned"), "model_unavailable"),
