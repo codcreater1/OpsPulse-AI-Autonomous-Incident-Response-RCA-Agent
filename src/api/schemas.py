@@ -21,6 +21,18 @@ IncidentStatus = Literal[
 ]
 
 
+class AlertOutcome(BaseModel):
+    alert: str
+    incident_id: str | None
+    outcome: Literal["queued", "duplicate", "skipped"]
+    detail: str | None = None
+
+
+class AlertmanagerResult(BaseModel):
+    alerts: list[AlertOutcome]
+    dropped: int = Field(0, description="Firing alerts beyond the per-notification limit (not processed)")
+
+
 class IncidentRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",

@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
-from src.api.auth import submission_limiter
-from src.api.schemas import ErrorResponse, IncidentAccepted, IncidentResult
+from src.api.auth import Principal, rate_limited_reporter, submission_limiter
+from src.api.schemas import AlertmanagerResult, AlertOutcome, ErrorResponse, IncidentAccepted, IncidentResult
 from src.config import settings
-from src.integrations import sentry
+from src.integrations import alertmanager, sentry
 from src.services import incident_service
 from src.services.incident_service import DatabaseUnavailableError, IncidentConflictError
 
@@ -85,3 +86,82 @@ async def sentry_webhook(request: Request) -> Response:
     return JSONResponse(
         status_code=202, content=IncidentAccepted(incident_id=str(incident.incident_id), status="queued").model_dump()
     )
+
+
+@router.post(
+    "/alertmanager",
+    response_model=AlertmanagerResult,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        401: {"model": ErrorResponse},
+        413: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+)
+async def alertmanager_webhook(
+    request: Request, principal: Annotated[Principal, Depends(rate_limited_reporter)]
+) -> AlertmanagerResult:
+    """Prometheus Alertmanager `webhook_config` receiver (payload version 4), authenticated with a reporter API key
+    as a Bearer token. One incident per firing alert; the repository comes from the `ALERTMANAGER_REPO_LABEL`
+    label (default `repository`) and must be allow-listed. Repeated notifications are idempotent."""
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > alertmanager.MAX_BODY_BYTES:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "payload too large")
+    body = await request.body()
+    if len(body) > alertmanager.MAX_BODY_BYTES:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "payload too large")
+    try:
+        payload = json.loads(body)
+        incidents, dropped = alertmanager.to_incidents(
+            payload if isinstance(payload, dict) else {}, settings.alertmanager_repo_label
+        )
+    except (ValueError, alertmanager.AlertmanagerPayloadError) as exc:
+        message = str(exc) if isinstance(exc, alertmanager.AlertmanagerPayloadError) else "body is not valid JSON"
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, message) from exc
+
+    outcomes = []
+    for alert in incidents:
+        if alert.repo_name is None:
+            detail = f"label {settings.alertmanager_repo_label!r} missing or not 'owner/repo'"
+            outcomes.append(AlertOutcome(alert=alert.alert_name, incident_id=None, outcome="skipped", detail=detail))
+            continue
+        if not settings.is_repository_allowed(alert.repo_name):
+            outcomes.append(
+                AlertOutcome(
+                    alert=alert.alert_name, incident_id=None, outcome="skipped", detail="repository not allowed"
+                )
+            )
+            continue
+        try:
+            _, created = incident_service.submit_incident(
+                alert.incident_id,
+                alert.repo_name,
+                alert.error_message,
+                alert.stack_trace,
+                submitted_by=principal.name,
+            )
+        except IncidentConflictError:
+            outcomes.append(
+                AlertOutcome(
+                    alert=alert.alert_name,
+                    incident_id=str(alert.incident_id),
+                    outcome="skipped",
+                    detail="incident id already used with different content",
+                )
+            )
+            continue
+        except DatabaseUnavailableError as exc:
+            # Alertmanager retries on 5xx; the derived ids make the retry idempotent.
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "database unavailable") from exc
+        outcomes.append(
+            AlertOutcome(
+                alert=alert.alert_name,
+                incident_id=str(alert.incident_id),
+                outcome="queued" if created else "duplicate",
+            )
+        )
+    if dropped:
+        logger.warning("Alertmanager notification: %d firing alerts beyond the limit were dropped", dropped)
+    return AlertmanagerResult(alerts=outcomes, dropped=dropped)

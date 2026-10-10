@@ -147,16 +147,21 @@ def extract_frames(stack_trace: str) -> tuple[list[Frame], str]:
     return js, "javascript"
 
 
+def get_application_frames(stack_trace: str) -> list[Frame]:
+    """Application (non-library) frames, closest to the crash first."""
+    frames, _ = extract_frames(stack_trace)
+    return [
+        frame
+        for frame in frames
+        if not _is_internal(frame.path)
+        and not (frame.language == "java" and frame.function.startswith(INTERNAL_JAVA_PREFIXES))
+    ]
+
+
 def get_trigger_frame(stack_trace: str) -> Frame | None:
     """First application (non-library) frame closest to the crash."""
-    frames, _ = extract_frames(stack_trace)
-    for frame in frames:
-        if _is_internal(frame.path):
-            continue
-        if frame.language == "java" and frame.function.startswith(INTERNAL_JAVA_PREFIXES):
-            continue
-        return frame
-    return None
+    frames = get_application_frames(stack_trace)
+    return frames[0] if frames else None
 
 
 def extract_exception_type(error_message: str, stack_trace: str) -> str:

@@ -116,6 +116,9 @@ def _identities() -> tuple[ApiIdentity, ...]:
 class Settings:
     """Immutable snapshot of the environment, created once at import time."""
 
+    # --- Alertmanager webhook: the alert label that names the GitHub repository ---
+    alertmanager_repo_label: str = field(default_factory=lambda: _env("ALERTMANAGER_REPO_LABEL", default="repository"))
+
     # --- LLM (Groq) ---
     groq_api_key: str = field(default_factory=lambda: _env("GROQ_API_KEY"))
     model_name: str = field(default_factory=lambda: _env("MODEL_NAME", "GROQ_MODEL", default="openai/gpt-oss-120b"))
@@ -165,6 +168,9 @@ class Settings:
     require_remediation_approval: bool = field(default_factory=lambda: _bool("REQUIRE_REMEDIATION_APPROVAL", True))
     approval_ttl_hours: int = field(default_factory=lambda: int(_number(("APPROVAL_TTL_HOURS",), 72, int, 1, 720)))
     context_radius: int = field(default_factory=lambda: int(_number(("CODE_CONTEXT_RADIUS",), 50, int, 5, 200)))
+    # Calling application frames shown to the model (0 disables), each as +/- CALLER_CONTEXT_RADIUS lines.
+    caller_frames: int = field(default_factory=lambda: int(_number(("CALLER_CONTEXT_FRAMES",), 2, int, 0, 5)))
+    caller_radius: int = field(default_factory=lambda: int(_number(("CALLER_CONTEXT_RADIUS",), 8, int, 2, 50)))
     max_patch_changed_lines: int = field(
         default_factory=lambda: int(_number(("MAX_PATCH_CHANGED_LINES",), 40, int, 1, 400))
     )

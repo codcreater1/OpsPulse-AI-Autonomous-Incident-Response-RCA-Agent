@@ -1,0 +1,113 @@
+{
+  "version": "rca-callers-v1",
+  "cases": [
+    {
+      "id": "caller-passes-none",
+      "scenario": "A report passes a missing amount (None) to a formatter that expects a number",
+      "repo_name": "eval/callers",
+      "error_message": "TypeError: type NoneType doesn't define __round__ method",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/report.py\", line 7, in render_rows\n    out.append(format_amount(row.get(\"amount\")))\n  File \"/app/app/money.py\", line 2, in format_amount\n    return f\"{round(value, 2):.2f} EUR\"\nTypeError: type NoneType doesn't define __round__ method",
+      "files": {
+        "app/money.py": "def format_amount(value):\n    return f\"{round(value, 2):.2f} EUR\"\n",
+        "app/report.py": "from app.money import format_amount\n\n\ndef render_rows(rows):\n    out = []\n    for row in rows:\n        out.append(format_amount(row.get(\"amount\")))\n    return out\n"
+      },
+      "history": [],
+      "expected": {
+        "inconclusive": false,
+        "relevant_files": [
+          "app/report.py"
+        ],
+        "root_cause_category": "null_reference"
+      },
+      "mock_replies": [
+        {
+          "category": "null_reference",
+          "quote": "format_amount(row.get(\"amount\"))",
+          "fix": null
+        }
+      ]
+    },
+    {
+      "id": "caller-empty-list",
+      "scenario": "Checkout splits a bill between zero payers",
+      "repo_name": "eval/callers",
+      "error_message": "ZeroDivisionError: division by zero",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/orders.py\", line 6, in checkout\n    shares = split_payment(order[\"total\"], len(payers))\n  File \"/app/app/payments.py\", line 2, in split_payment\n    share = total / parts\nZeroDivisionError: division by zero",
+      "files": {
+        "app/payments.py": "def split_payment(total, parts):\n    share = total / parts\n    return [share] * parts\n",
+        "app/orders.py": "from app.payments import split_payment\n\n\ndef checkout(order):\n    payers = order.get(\"payers\", [])\n    shares = split_payment(order[\"total\"], len(payers))\n    return dict(zip(payers, shares))\n"
+      },
+      "history": [],
+      "expected": {
+        "inconclusive": false,
+        "relevant_files": [
+          "app/orders.py"
+        ],
+        "root_cause_category": "logic_error"
+      },
+      "mock_replies": [
+        {
+          "category": "logic_error",
+          "quote": "payers = order.get(\"payers\", [])",
+          "fix": null
+        }
+      ]
+    },
+    {
+      "id": "caller-two-levels-up",
+      "scenario": "A handler passes the raw query-string value (str) two calls down to arithmetic",
+      "repo_name": "eval/callers",
+      "error_message": "TypeError: unsupported operand type(s) for -: 'str' and 'int'",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/handlers.py\", line 6, in get_items\n    return list_items(db, page)\n  File \"/app/app/service.py\", line 5, in list_items\n    offset = page_offset(page, size)\n  File \"/app/app/util.py\", line 2, in page_offset\n    return (page - 1) * size\nTypeError: unsupported operand type(s) for -: 'str' and 'int'",
+      "files": {
+        "app/util.py": "def page_offset(page, size):\n    return (page - 1) * size\n",
+        "app/service.py": "from app.util import page_offset\n\n\ndef list_items(db, page, size=20):\n    offset = page_offset(page, size)\n    return db.fetch(offset=offset, limit=size)\n",
+        "app/handlers.py": "from app.service import list_items\n\n\ndef get_items(request, db):\n    page = request.query.get(\"page\", \"1\")\n    return list_items(db, page)\n"
+      },
+      "history": [],
+      "expected": {
+        "inconclusive": false,
+        "relevant_files": [
+          "app/handlers.py"
+        ],
+        "root_cause_category": "type_error"
+      },
+      "mock_replies": [
+        {
+          "category": "type_error",
+          "quote": "page = request.query.get(\"page\", \"1\")",
+          "fix": null
+        }
+      ]
+    },
+    {
+      "id": "control-cause-in-trigger",
+      "scenario": "Control: the caller filters correctly; safe_mean promises safety but does not handle an empty list",
+      "repo_name": "eval/callers",
+      "error_message": "ZeroDivisionError: division by zero",
+      "stack_trace": "Traceback (most recent call last):\n  File \"/app/app/dashboard.py\", line 6, in tile\n    return safe_mean(values)\n  File \"/app/app/stats.py\", line 6, in safe_mean\n    return mean(values)\n  File \"/app/app/stats.py\", line 2, in mean\n    return sum(values) / len(values)\nZeroDivisionError: division by zero",
+      "files": {
+        "app/stats.py": "def mean(values):\n    return sum(values) / len(values)\n\n\ndef safe_mean(values):\n    return mean(values)\n",
+        "app/dashboard.py": "from app.stats import safe_mean\n\n\ndef tile(metrics):\n    values = [m[\"value\"] for m in metrics if m[\"value\"] is not None]\n    return safe_mean(values)\n"
+      },
+      "history": [],
+      "expected": {
+        "inconclusive": false,
+        "relevant_files": [
+          "app/stats.py"
+        ],
+        "root_cause_category": "logic_error"
+      },
+      "mock_replies": [
+        {
+          "category": "logic_error",
+          "quote": "return sum(values) / len(values)",
+          "fix": {
+            "old": "    return mean(values)\n",
+            "new": "    return mean(values) if values else 0.0\n"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -24,7 +24,7 @@ which waits for an **explicit human approval** and is never merged automatically
 
 - [Features](#features) · [Architecture](#architecture) · [Workflow and statuses](#workflow-and-statuses)
 - [Quality gate](#quality-gate) · [Evaluation](#evaluation) · [Retrieval](#retrieval)
-- [Human approval](#human-approval-and-remediation-safety) · [Sentry](#sentry-integration) · [Notifications](#reviewer-notifications) · [Review console](#review-console) · [Observability](#observability-langfuse)
+- [Human approval](#human-approval-and-remediation-safety) · [Sentry](#sentry-integration) · [Alertmanager](#alertmanager-integration) · [Notifications](#reviewer-notifications) · [Review console](#review-console) · [Observability](#observability-langfuse)
 - [Setup](#setup) · [API](#api) · [Testing and CI](#testing-and-ci) · [Demo](#demo)
 - [Security](#security-model) · [Limitations](#known-limitations) · [Roadmap](#roadmap)
 
@@ -34,7 +34,7 @@ which waits for an **explicit human approval** and is never merged automatically
 |---|---|
 | Ingestion | `POST /webhook/incident` with validation, size limits, role-based API keys (fail-closed, stored as SHA-256), per-identity rate limit, repository allow-list, idempotent client-supplied `incident_id` |
 | Orchestration | Compiled LangGraph `StateGraph`, one typed state contract, bounded retry loop (`MAX_ANALYSIS_ITERATIONS`); durable PostgreSQL-backed job queue with leased claims and any number of workers |
-| Integrations | Sentry issue-alert webhooks (`POST /integrations/sentry`, HMAC-verified, project -> repository mapping, idempotent per event) |
+| Integrations | Sentry issue-alert webhooks (`POST /integrations/sentry`, HMAC-verified, project -> repository mapping, idempotent per event); Prometheus Alertmanager receiver (`POST /integrations/alertmanager`, Bearer API key, idempotent per alert) |
 | Context | Stack-trace parsing (Python, JS, Java, Go), GitHub source window around the failing line, ranked same-repository history |
 | Analysis | Groq (`openai/gpt-oss-120b` by default; `llama-3.3-70b-versatile` is no longer served) in JSON mode, validated by a Pydantic schema; every evidence item labelled *observed / inference / hypothesis* |
 | Quality gate | Deterministic, weighted checks with *blocking* checks: schema, trigger frame, **verbatim evidence quotes**, file grounding, patch applies to retrieved source, locality, size |
@@ -126,7 +126,10 @@ truth without a demonstrated benefit; a crashed claim simply restarts the analys
 2. **extract_stack_trace_context** - finds the application frame closest to the crash (library frames skipped).
 3. **retrieve_source_context** - resolves the runtime path inside the repo tree and reads +/- 50 lines from the
    default branch. Missing file, missing token, permission or rate-limit errors degrade to "no source" and are
-   stated explicitly in the prompt (`SOURCE NOT AVAILABLE (reason)`).
+   stated explicitly in the prompt (`SOURCE NOT AVAILABLE (reason)`). It also reads +/- 8 lines around up to 2
+   *calling* application frames (`CALLER_CONTEXT_FRAMES`, `CALLER_CONTEXT_RADIUS`), so a cause in a caller - a bad
+   argument passed down - can be quoted and verified. Callers are diagnosis context only: patches may still change
+   only the failing file; a fix that belongs in a caller is reported, not patched.
 4. **retrieve_historical_incidents** - ranked, explained matches from the *same repository only*.
 5. **analyze_root_cause** - one LLM attempt (`iterations += 1`). Malformed output counts as an attempt; provider
    failures (auth, rate limit, timeout, unknown model) end the workflow as `failed` - they are not retried by the
@@ -431,6 +434,32 @@ queued incident submitted by the identity `sentry` (so a human reviewer can appr
 `in_app` frames are turned into a Python-style traceback for the parser, and the incident id is derived from
 Sentry's `event_id`, so repeated deliveries return the existing incident instead of analysing it twice.
 
+## Alertmanager integration
+
+`POST /integrations/alertmanager` is a Prometheus Alertmanager `webhook_config` receiver (payload version 4),
+authenticated with an ordinary reporter API key sent as a Bearer token (every API endpoint accepts
+`Authorization: Bearer <key>` as well as `X-API-Key`). Tested with payloads of the documented shape, **not against
+a running Alertmanager**.
+
+```yaml
+receivers:
+  - name: opspulse
+    webhook_configs:
+      - url: https://<host>/integrations/alertmanager
+        http_config:
+          authorization:
+            credentials_file: /etc/alertmanager/opspulse-key   # key from: python -m scripts.make_api_key alertmanager reporter
+```
+
+Each *firing* alert becomes one incident (resolved alerts are ignored; at most 20 per notification, the rest are
+counted as `dropped`). The repository comes from the alert label `repository` (`ALERTMANAGER_REPO_LABEL`) and must
+be allow-listed; the message from `alertname`, `summary` and `description`; the stack trace from an optional
+`stack_trace` annotation. The response lists each alert as `queued`, `duplicate` or `skipped` (with the reason), so
+one alert with a missing label does not fail the batch. Incident ids derive from the alert fingerprint and start
+time: Alertmanager's repeat notifications do not create new analyses, and a 503 (database down) is safe to retry.
+**An alert without a stack trace usually ends as "insufficient evidence"** - the agent does not invent a cause from
+a metric threshold.
+
 ## Reviewer notifications
 
 Set `NOTIFY_WEBHOOK_URL` (an `https://` incoming-webhook URL; Slack and Mattermost accept the `{"text": ...}`
@@ -677,8 +706,9 @@ One run of one bug - it shows the loop works end to end, not that it generalises
   identity. The rate limiter is per process.
 - Path resolution maps runtime paths to repo files by suffix; monorepos with duplicate file names may resolve
   the wrong file, and very large repos may hit truncated git trees.
-- Only the failing file (+/- 50 lines) is retrieved; root causes in callers outside that window are found only
-  if the trace includes them.
+- Only the failing file (+/- 50 lines) and short windows (+/- 8 lines) around up to two calling frames are
+  retrieved; causes further away (e.g. where a bad value was created, not where it was passed) are not visible.
+  Patches are limited to the failing file even when the fix belongs in a caller.
 - The remediation branch name is deterministic per failure; a stale branch from an earlier, closed PR blocks a
   new PR until it is deleted (enable "automatically delete head branches" on the repository).
 - Evaluation labels and the retrieval dataset were authored by one person; metrics are indicative, not benchmarks.
@@ -686,7 +716,7 @@ One run of one bug - it shows the loop works end to end, not that it generalises
 ## Roadmap
 
 - More real-world-shaped cases, ideally from real incident post-mortems.
-- More inbound adapters (Alertmanager, Datadog) and per-tenant allow-lists.
+- More inbound adapters (Datadog, OpenTelemetry) and per-tenant allow-lists.
 - PostgreSQL full-text search for candidate selection when histories outgrow the 200-row window; evaluate
   embeddings only if lexical recall proves insufficient on real data.
 - Optional sandboxed execution of the target repository's tests before proposing a PR.

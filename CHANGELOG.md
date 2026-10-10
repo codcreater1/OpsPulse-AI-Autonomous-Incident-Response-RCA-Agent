@@ -6,6 +6,11 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Added
+- Caller context (`rca-prompt-v5`, `quality-gate-v5`): short windows around up to two calling application frames
+  are shown to the model and accepted as grounding for quotes; patches stay limited to the failing file. New
+  dataset `rca-callers-v1` (4 cases, one control) with a mock baseline in the CI regression gate.
+- `POST /integrations/alertmanager` (Prometheus Alertmanager webhook receiver, idempotent per alert, per-alert
+  outcomes) and `Authorization: Bearer <key>` accepted on every endpoint.
 - `LLM_MAX_OUTPUT_TOKENS` (was fixed at 4096, now part of run metadata); replies stopped by the limit are flagged
   `truncated` in the attempt trace and the next attempt gets "answer more concisely" feedback.
 - Rate-limit errors name the provider limit that was hit (e.g. `(TPD)`), without the provider's message text;

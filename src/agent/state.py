@@ -34,6 +34,7 @@ class IncidentState(TypedDict):
     affected_file: str | None
     failing_line: int | None
     code_context: str | None
+    caller_context: str | None  # short windows around calling application frames (diagnosis only, never patched)
     context_status: ContextStatus
     context_note: str | None
     historical_matches: list[dict[str, Any]]
@@ -60,6 +61,7 @@ def initial_state(incident_id: str, error_message: str, stack_trace: str, repo_n
         affected_file=None,
         failing_line=None,
         code_context=None,
+        caller_context=None,
         context_status="pending",
         context_note=None,
         historical_matches=[],

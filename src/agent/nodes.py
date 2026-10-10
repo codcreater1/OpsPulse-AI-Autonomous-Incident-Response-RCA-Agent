@@ -18,7 +18,15 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src import metrics
 from src.agent.evaluation import Evaluation, EvaluationInput, evaluate
-from src.agent.parsing import clean_text, compute_fingerprint, get_trigger_frame, normalize_path, split_embedded_trace
+from src.agent.parsing import (
+    clean_text,
+    compute_fingerprint,
+    get_application_frames,
+    get_trigger_frame,
+    normalize_path,
+    split_embedded_trace,
+)
+from src.agent.patching import PatchError, format_code_window, parse_code_window
 from src.agent.prompts import RCA_SYSTEM_PROMPT, build_rca_user_prompt
 from src.agent.schemas import RCAOutput
 from src.agent.state import IncidentState
@@ -83,9 +91,44 @@ def make_retrieve_source_context(fetch: ContextFetcher) -> Callable[[IncidentSta
             "context_note": None,
             "affected_file": ctx.path,
             "code_context": ctx.render(),
+            "caller_context": _caller_context(fetch, state, ctx),
         }
 
     return retrieve_source_context
+
+
+def _caller_context(fetch: ContextFetcher, state: IncidentState, trigger_ctx: SourceContext) -> str | None:
+    """Short windows around the calling application frames, so a cause in a caller is visible.
+
+    Best effort: a frame that cannot be fetched is skipped, and lines already shown are not repeated. Only the
+    trigger file may be patched; callers are context for the diagnosis.
+    """
+    if settings.caller_frames <= 0:
+        return None
+    blocks: list[str] = []
+    seen = {(trigger_ctx.path, line) for line in range(trigger_ctx.start_line, trigger_ctx.end_line + 1)}
+    for frame in get_application_frames(state["stack_trace"])[1:]:
+        if len(blocks) >= settings.caller_frames:
+            break
+        try:
+            ctx = fetch(state["repo_name"], normalize_path(frame.path), frame.line)
+        except (GitHubError, *TRANSPORT_ERRORS) as exc:
+            logger.info("caller context skipped: %s", type(exc).__name__)
+            continue
+        if ctx is None or (ctx.path, ctx.failing_line) in seen:
+            continue
+        try:
+            first, lines = parse_code_window(ctx.window_text)
+        except PatchError:
+            continue
+        lo = max(ctx.failing_line - settings.caller_radius, first)
+        hi = min(ctx.failing_line + settings.caller_radius, first + len(lines) - 1)
+        seen.update((ctx.path, line) for line in range(lo, hi + 1))
+        blocks.append(
+            f"FILE: {ctx.path} (caller {frame.function or '?'}, line {ctx.failing_line})\n"
+            + format_code_window(lines[lo - first : hi - first + 1], lo)
+        )
+    return "\n\n".join(blocks) or None
 
 
 def make_retrieve_historical_incidents(lookup: HistoryLookup) -> Callable[[IncidentState], Update]:
@@ -287,6 +330,7 @@ def _evaluate(state: IncidentState, content: dict[str, Any]) -> Evaluation:
             trigger=get_trigger_frame(state["stack_trace"]),
             affected_file=state["affected_file"],
             code_context=state["code_context"],
+            caller_context=state.get("caller_context"),
             historical_matches=state["historical_matches"],
             max_changed_lines=settings.max_patch_changed_lines,
             error_message=state["error_message"],

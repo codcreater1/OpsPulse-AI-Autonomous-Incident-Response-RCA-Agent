@@ -201,6 +201,7 @@ def run_case(case: EvalCase, model_factory: ModelFactory | None) -> dict[str, An
         trigger=get_trigger_frame(final["stack_trace"]),
         affected_file=final["affected_file"],
         code_context=final["code_context"],
+        caller_context=final.get("caller_context"),
         historical_matches=final["historical_matches"],
         max_changed_lines=settings.max_patch_changed_lines,
         error_message=final["error_message"],

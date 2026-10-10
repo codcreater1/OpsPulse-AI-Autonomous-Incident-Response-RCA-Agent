@@ -18,11 +18,13 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Security, status
-from fastapi.security import APIKeyHeader
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from src.config import settings
 
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+# Same keys as a Bearer token, for clients that can only send `Authorization` (e.g. Alertmanager http_config).
+_bearer = HTTPBearer(auto_error=False)
 
 
 @dataclass(frozen=True)
@@ -31,8 +33,12 @@ class Principal:
     role: str
 
 
-def authenticate(provided: Annotated[str | None, Security(_api_key_header)]) -> Principal:
+def authenticate(
+    api_key: Annotated[str | None, Security(_api_key_header)],
+    bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_bearer)],
+) -> Principal:
     """Fail closed: with no identities configured, refuse requests unless ALLOW_UNAUTHENTICATED=true."""
+    provided = api_key or (bearer.credentials if bearer else None)
     if not settings.api_identities:
         if settings.allow_unauthenticated:
             return Principal("anonymous", "admin")

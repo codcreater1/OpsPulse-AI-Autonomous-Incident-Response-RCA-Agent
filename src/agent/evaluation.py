@@ -68,6 +68,7 @@ class EvaluationInput:
     historical_matches: list[dict[str, Any]]
     max_changed_lines: int
     error_message: str = ""
+    caller_context: str | None = None
 
 
 @dataclass(frozen=True)
@@ -148,12 +149,14 @@ def _source_text(source: str, inp: EvaluationInput) -> str | None:
     if source == "stack_trace":
         return inp.stack_trace
     if source == "code_context":
-        if not inp.code_context:
-            return None
-        try:
-            return "\n".join(parse_code_window(inp.code_context)[1])
-        except PatchError:
-            return None
+        # Quotes may come from the trigger window or from a caller window; both were shown to the model.
+        texts = []
+        for block in (inp.code_context, inp.caller_context):
+            try:
+                texts.append("\n".join(parse_code_window(block or "")[1]))
+            except PatchError:
+                continue
+        return "\n".join(texts) or None
     if source == "historical_incidents":
         return format_history(inp.historical_matches) if inp.historical_matches else None
     return None

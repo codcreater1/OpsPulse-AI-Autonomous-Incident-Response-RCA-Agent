@@ -32,6 +32,7 @@ DATASET_FILES = {
     "tuning": DATASETS / "rca_cases.json",  # used while developing prompts and the gate
     "holdout": DATASETS / "rca_holdout.json",  # never used for tuning
     "adversarial": DATASETS / "rca_adversarial.json",  # tries to provoke unsupported conclusions
+    "callers": DATASETS / "rca_callers.json",  # root cause in a calling function
 }
 
 
