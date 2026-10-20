@@ -6,6 +6,14 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Added
+- Ablation on the callers set (3 runs per case, live): what self-correction and caller context contribute
+  ([`ABLATION-callers-v3-2026-10-20.md`](evals/results/ABLATION-callers-v3-2026-10-20.md)). Neither shows a clear effect on
+  outcomes at this sample size: without caller context the model still names the right file 13/13 and still declines to
+  patch the callee, losing only about 0.4 verified quotes per run; without self-correction one repairable quote stayed
+  unverified and one callee patch was accepted once in three runs (the same case ranges from 0/3 to 3/3 across prompt
+  versions, so that is within the model's own variation). Reported as such, not as a result.
+
+### Added
 - **Optional sandboxed test run** (`SANDBOX_ENABLED`, default off). Before a patch is proposed, the target repository's
   tests run in a throwaway Docker container (no network, read-only root, `--cap-drop ALL`, unprivileged user, memory,
   CPU, process and time caps) with and without the patch. The result is stored in the analysis (`analysis.sandbox`),
