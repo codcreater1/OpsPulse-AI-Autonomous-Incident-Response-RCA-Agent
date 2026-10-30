@@ -5,6 +5,10 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Documentation
+- `docs/MEASUREMENTS.md`: every measured number by version with its 95 % Wilson interval, led by the finding that a passing
+  gate does not mean a correct fix. Added to the docs site.
+
 ### Changed
 - `evals.history_real_repo` runs a repository's tests in a Docker container by default (no network, read-only root, no
   capabilities, unprivileged user, memory/CPU/process/time caps) instead of on the host. Build the image with
