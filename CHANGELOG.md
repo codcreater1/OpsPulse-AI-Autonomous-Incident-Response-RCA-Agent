@@ -5,6 +5,10 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Added
+- CI: a macOS job (`macos-15`, Python 3.11) runs the unit tests and `scripts.e2e_flow`; the demo scripts had failed on a Mac while
+  every Linux job was green. The runner-label test now accepts a pinned `macos-NN` next to `ubuntu-NN.NN`.
+
 ### Changed
 - `evals.history_real_repo` runs a repository's tests in a Docker container by default (no network, read-only root, no
   capabilities, unprivileged user, memory/CPU/process/time caps) instead of on the host. Build the image with
