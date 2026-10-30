@@ -5,6 +5,10 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Documentation
+- CONTRIBUTING: how to set up Python 3.11 with uv (macOS ships 3.9), how to run Docker Desktop's CLI and the opt-in Docker tests, and
+  three macOS gotchas (symlinked temp directories, zsh word splitting, keeping the Groq key out of command lines).
+
 ### Changed
 - `evals.history_real_repo` runs a repository's tests in a Docker container by default (no network, read-only root, no
   capabilities, unprivileged user, memory/CPU/process/time caps) instead of on the host. Build the image with
