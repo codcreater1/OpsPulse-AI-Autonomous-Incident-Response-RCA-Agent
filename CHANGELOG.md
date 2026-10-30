@@ -5,6 +5,11 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Added
+- `evals.repro_eval` keeps each run's patch, and `history_real_repo verify` accepts its report: every patch is run against
+  the real regression test and paired with the model's own reproduction-test outcome, to measure whether the model's test
+  predicts the real one.
+
 ### Changed
 - `evals.history_real_repo` runs a repository's tests in a Docker container by default (no network, read-only root, no
   capabilities, unprivileged user, memory/CPU/process/time caps) instead of on the host. Build the image with
