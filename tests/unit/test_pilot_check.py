@@ -190,9 +190,25 @@ def test_docker_is_skipped_when_the_sandbox_is_off():
     [([0, 0], OK, "present"), ([1], FAIL, "no Docker daemon"), ([0, 1], FAIL, "not present locally")],
 )
 def test_docker_checks(returncodes, expected, fragment):
+    if expected == OK:  # the default `python:3.11-slim` has no pytest and gets its own warning (below)
+        cfg = _cfg(sandbox_enabled=True, sandbox_image="opspulse-sandbox")
+        (finding,) = pilot_check.docker(cfg, run=lambda argv: 0)
+        assert finding.level == OK and fragment in finding.message
+        return
     codes = iter(returncodes)
     (finding,) = pilot_check.docker(_cfg(sandbox_enabled=True), run=lambda argv: next(codes))
     assert finding.level == expected and fragment in finding.message
+
+
+def test_a_bare_python_image_is_warned_about_because_it_has_no_pytest():
+    (finding,) = pilot_check.docker(_cfg(sandbox_enabled=True, sandbox_image="python:3.11-slim"), run=lambda argv: 0)
+    assert finding.level == WARN and "pytest" in finding.message
+
+
+def test_the_missing_image_message_says_how_to_build_one():
+    codes = iter([0, 1])
+    (finding,) = pilot_check.docker(_cfg(sandbox_enabled=True), run=lambda argv: next(codes))
+    assert "docker build -t opspulse-sandbox" in finding.message
 
 
 # ------------------------------------------------------------------ command line
