@@ -7,22 +7,25 @@ trust the system. All live numbers: one model (`openai/gpt-oss-120b`, Groq free 
 ## The finding that matters
 
 **A passing quality gate does not mean the fix is right.** On real bug-fix history (a commit that fixed a bug and added a
-test; the parent commit plus that test is the incident), the gate accepted every analysed run with the right file and no
-invented quote, yet few of the accepted patches made the real regression test pass.
+test; the parent commit plus that test is the incident), the gate accepted analyses with the right file and no invented
+quote, and a sizeable share of the accepted patches still failed the real regression test.
 
-| Version | Accepted patches that pass the real regression test (the four cases comparable across versions) | 95 % interval |
+| Real bug-fix cases | Accepted patches passing the real test | 95 % interval |
 |---|---|---|
-| prompt v7.1 / gate v8 | 2 of 10 | 6-51 % |
-| prompt v7.2 / gate v9 | 2 of 9 | 6-55 % |
-| gate v10 experiment (retry on a surviving copy, not merged) | 2 of 10 | 6-51 % |
+| **20 cases from 6 libraries**, prompt v7.2 / gate v9, 2 runs each (40 runs, verified in the no-network container) | **18 of 27** (67 %) | 48-81 % |
+| the same, accepted patches that **fail** | 9 of 27 (33 %) | 19-52 % |
+| the first 5 cases only, prompt v7.1, one draw | 2 of 10 | 6-51 % |
+| the same 4 cases, prompt v7.2, a day later | 2 of 9, then 5 of 8 in the 20-case run | 6-55 % and 31-86 % |
 
-The three rows are statistically indistinguishable, and every interval is wide: 5 cases from 2 small libraries, 3 runs each.
-What it supports is the *direction*: the structural checks do not see wrong behaviour. It does not support any claim that one
-version is better than another.
+How to read it: the first line is the best estimate we have, and about a third of accepted patches failing is the finding.
+The last two lines are the warning: **the same prompt and gate on the same four cases gave 2 of 9 on one day and 5 of 8 on
+another**, with host and container verdicts identical, so the model's own sampling varies more than the differences between
+the prompt and gate versions we compared (v7.1, v7.2, and a retry experiment that was not merged). Those comparisons cannot
+tell the versions apart; they are not evidence that nothing changed.
 
-Why the accepted patches failed the real test (8 runs read one by one): a sibling copy of the faulty statement left unfixed (2),
-a crash avoided with a wrong value instead of the right output (2), a behaviour choice the code does not determine (3), a new
-`UnboundLocalError` (1).
+Why accepted patches failed the real test (read one by one on the first 5 cases): a sibling copy of the faulty statement left
+unfixed, a crash avoided with a wrong value instead of the right output, a behaviour choice the code does not determine, a
+new `UnboundLocalError`.
 
 ## Everything else
 
