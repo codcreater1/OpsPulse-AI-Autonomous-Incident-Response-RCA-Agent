@@ -79,6 +79,11 @@
         <p id="list-message" class="message" role="status"></p>
         <button type="button" id="list-retry" class="btn tiny" hidden>Retry</button>
       </div>
+      <p id="key-help" class="muted small" hidden>
+        Keys are issued by whoever runs this server: <code>python -m scripts.make_api_key &lt;name&gt; reviewer</code> creates one.
+        A reporter key can submit and read incidents; a reviewer key can also approve or reject a proposed fix.
+        The key stays in this browser tab and is forgotten when you close it.
+      </p>
       <section id="queue-card" class="card queue-card" aria-labelledby="qc-title" hidden>
         <div class="qc-head">
           <h2 id="qc-title">Your queue</h2>
