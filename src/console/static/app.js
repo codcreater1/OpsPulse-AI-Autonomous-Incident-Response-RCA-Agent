@@ -206,6 +206,7 @@ async function loadList(append = false) {
     $("net-banner").hidden = true;
     setConnection("on", "Connected");
     $("key-help").hidden = true;
+    state.enter = !append; // a fresh page of results may animate in; re-filtering and searching must not replay it
     renderRows();
   } catch (error) {
     if (isAbort(error) || mine !== seq.list) return;
@@ -322,8 +323,12 @@ function renderRows() {
   const items = visibleItems();
   state.queue = items.map((item) => item.incident_id); // the order the reviewer is working through
   state.focusIndex = -1;
+  body.classList.toggle("enter", Boolean(state.enter));
+  state.enter = false;
+  let order = 0;
   for (const item of items) {
     const row = document.createElement("tr");
+    row.style.setProperty("--i", String(Math.min(order++, 14))); // CSSOM: drives the staggered entrance (css)
     row.tabIndex = 0;
     row.dataset.id = item.incident_id;
     const target = `#/incident/${encodeURIComponent(item.incident_id)}`;
@@ -1072,7 +1077,30 @@ function applyQueryOptions() {
   if (diffMode === "split" || diffMode === "unified") store("local", DIFF_STORAGE, diffMode);
 }
 
+/** The decision card follows the pointer by a few degrees. Skipped for reduced motion, touch, and while typing. */
+function initTilt() {
+  const calm = matchMedia("(prefers-reduced-motion: reduce)").matches || matchMedia("(pointer: coarse)").matches;
+  const card = $("approval");
+  if (calm || !card) return;
+  let frame = 0;
+  const reset = () => { card.style.setProperty("--rx", "0deg"); card.style.setProperty("--ry", "0deg"); };
+  card.addEventListener("pointermove", (event) => {
+    if (frame || card.matches(":focus-within")) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      const box = card.getBoundingClientRect();
+      const x = (event.clientX - box.left) / box.width - 0.5;
+      const y = (event.clientY - box.top) / box.height - 0.5;
+      card.style.setProperty("--ry", `${(x * 4).toFixed(2)}deg`);
+      card.style.setProperty("--rx", `${(-y * 4).toFixed(2)}deg`);
+    });
+  });
+  card.addEventListener("pointerleave", reset);
+  card.addEventListener("focusin", reset);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  initTilt();
   applyTheme(store("local", THEME_STORAGE) || "auto");
   applyQueryOptions();
   $("theme").addEventListener("click", cycleTheme);
