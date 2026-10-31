@@ -72,6 +72,13 @@ All notable changes are listed here. Versions of behaviour-critical components a
   key says what to check; a short help line explains who issues keys. A pasted line (`name (role): key`), quotes or a trailing
   newline are reduced to the key itself (`cleanApiKey`, unit-tested).
 
+### Changed
+- **Console redesign: an incident ledger instead of a generic SaaS dashboard.** Warm paper and ink (dark theme: warm near-black),
+  one rust accent used sparingly, primary actions in ink rather than a brand colour, square corners and hairline rules, a serif for
+  headings and monospace for facts (ids, files, scores, statuses), square status stamps instead of rounded pills, a new favicon and
+  logotype. Only `styles.css` and the favicon changed (no markup or script change, the CSP rules and tests are unchanged); contrast
+  was re-measured over every visible text element in both themes (no failures) and the README screenshots were regenerated.
+
 ## [1.9.0] - 2026-10-27
 
 A reviewer who works through a queue instead of one case at a time, an advisory that points at a diagnosis the code contradicts,
