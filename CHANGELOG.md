@@ -5,6 +5,11 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Added
+- First measurement on 20 real bug-fix cases from 6 libraries (`evals/results/history-real20-*`): of 27 gate-accepted runs, 18 passed the real
+  regression test (67 %, interval 48-81 %). It also shows the run-to-run noise is larger than the differences between prompt/gate
+  versions measured earlier on 5 cases, which `docs/LIMITATIONS.md` now says.
+
 ### Changed
 - `evals.history_real_repo` runs a repository's tests in a Docker container by default (no network, read-only root, no
   capabilities, unprivileged user, memory/CPU/process/time caps) instead of on the host. Build the image with
