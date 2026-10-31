@@ -188,7 +188,9 @@ jobs:
           cache: pip
           cache-dependency-path: requirements*.txt
       - run: pip install -r requirements-dev.txt
-      - name: Real fix, regression, missing test runner and five escape attempts (network, writes, root, secrets, fork bomb)
+      - name: Build the image that runs third-party tests for the real-repository evaluation
+        run: docker build -t opspulse-history-tests -f evals/history_tests.Dockerfile evals
+      - name: Real fix, regression, missing test runner and five escape attempts (network, writes, root, secrets, fork bomb), plus the history builder in its container
         env:
           RUN_DOCKER_TESTS: "1"
           DATABASE_URL: sqlite://
