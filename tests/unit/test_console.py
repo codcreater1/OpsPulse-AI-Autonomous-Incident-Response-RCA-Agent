@@ -81,6 +81,17 @@ def test_console_has_the_confirmation_dialog_and_live_regions():
     assert 'id="approve"' in html and 'id="confirm-ok"' in html
 
 
+def test_first_run_guidance_and_key_cleaning_are_wired():
+    """A first visit says what to do (not a red "Invalid key"), a refused key says what to check, and a pasted line is
+    reduced to the key by the same pure helper the unit tests cover."""
+    script = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    page = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    assert "U.cleanApiKey(" in script
+    assert 'id="key-help"' in page and "make_api_key" in page
+    assert "Paste your API key in the box at the top" in script
+    assert "did not accept this key" in script
+
+
 def test_console_script_is_syntactically_valid():
     import shutil
     import subprocess

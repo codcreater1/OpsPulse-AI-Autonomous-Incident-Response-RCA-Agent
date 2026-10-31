@@ -124,8 +124,17 @@ function failure(error, messageId) {
     setConnection("bad", "Offline");
     setMessage(messageId, error.message, true);
   } else if (error.status === 401) {
-    setConnection("bad", "Invalid key");
-    setMessage(messageId, "Enter a valid API key to continue.", true);
+    const hasKey = Boolean(apiKey());
+    // A first visit is not an error: say what to do, and keep the red "Invalid key" for a key that was really refused.
+    setConnection(hasKey ? "bad" : "off", hasKey ? "Invalid key" : "Not connected");
+    setMessage(
+      messageId,
+      hasKey
+        ? "The server did not accept this key. Paste only the key itself (no name, quotes or spaces) and use a reporter or reviewer key."
+        : "Paste your API key in the box at the top and press Connect.",
+      hasKey,
+    );
+    if (messageId === "list-message") $("key-help").hidden = false;
   } else if (error.status === 403) {
     setMessage(messageId, "This key may not perform that action.", true);
   } else {
@@ -196,6 +205,7 @@ async function loadList(append = false) {
     $("load-more").hidden = !page.next_cursor;
     $("net-banner").hidden = true;
     setConnection("on", "Connected");
+    $("key-help").hidden = true;
     renderRows();
   } catch (error) {
     if (isAbort(error) || mine !== seq.list) return;
@@ -1062,7 +1072,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("theme").addEventListener("click", cycleTheme);
   $("key-form").addEventListener("submit", (event) => {
     event.preventDefault();
-    setKey($("api-key").value.trim());
+    setKey(U.cleanApiKey($("api-key").value));
     $("api-key").value = "";
     route();
   });

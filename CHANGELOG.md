@@ -57,6 +57,15 @@ All notable changes are listed here. Versions of behaviour-critical components a
     cases that had verdicts before, 2 of 9 accepted patches pass the real test against 2 of 10 under v7.1, so
     **no measured improvement** (`evals/results/history-real-*2026-10-27*`).
 
+### Fixed
+- Unit tests did not pin `SANDBOX_ENABLED`, so a developer's local `.env` with the sandbox on made
+  `test_a_forged_sandbox_key_from_the_model_is_ignored` fail. The sandbox settings are pinned like every other setting.
+
+### Changed
+- Console, first run: a first visit shows a neutral "Not connected" and says what to do instead of a red "Invalid key"; a refused
+  key says what to check; a short help line explains who issues keys. A pasted line (`name (role): key`), quotes or a trailing
+  newline are reduced to the key itself (`cleanApiKey`, unit-tested).
+
 ## [1.9.0] - 2026-10-27
 
 A reviewer who works through a queue instead of one case at a time, an advisory that points at a diagnosis the code contradicts,
