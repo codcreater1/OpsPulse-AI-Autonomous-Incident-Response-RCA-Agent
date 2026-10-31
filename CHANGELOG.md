@@ -6,9 +6,14 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Added
-- `evals.repro_eval` keeps each run's patch, and `history_real_repo verify` accepts its report: every patch is run against
-  the real regression test and paired with the model's own reproduction-test outcome, to measure whether the model's test
-  predicts the real one.
+- First measurement on 20 real bug-fix cases from 6 libraries (`evals/results/history-real20-*`): of 27 gate-accepted runs, 18 passed the real
+  regression test (67 %, interval 48-81 %). It also shows the run-to-run noise is larger than the differences between prompt/gate
+  versions measured earlier on 5 cases, which `docs/LIMITATIONS.md` now says.
+
+### Changed
+- `pilot_check`: a missing sandbox image now says how to build a starting one, and a bare `python:*` image (no pytest) gets a
+  warning instead of a green "present".
+- CI: the Docker job also builds `opspulse-history-tests`, so the history builder's container test runs there instead of skipping.
 
 ### Changed
 - `evals.history_real_repo` runs a repository's tests in a Docker container by default (no network, read-only root, no
