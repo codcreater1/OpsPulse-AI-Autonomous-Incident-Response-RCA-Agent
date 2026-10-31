@@ -5,6 +5,12 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Fixed
+- Console, narrow screens: the incident list hides its header row below 760 px and stacked the cells, so a bare "1" or "just now"
+  had no meaning. Gate score, attempts and submitted now carry their own label.
+- Console, touch devices: the evidence filters, patch actions (side by side, copy, download), copy-id, section summaries, the
+  brand link and the theme button were 24-29 px tall; they are 44 px on `pointer: coarse`.
+
 ### Added
 - CI: a macOS job (`macos-15`, Python 3.11) runs the unit tests and `scripts.e2e_flow`; the demo scripts had failed on a Mac while
   every Linux job was green. The runner-label test now accepts a pinned `macos-NN` next to `ubuntu-NN.NN`.

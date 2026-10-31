@@ -235,3 +235,18 @@ def test_console_queue_card_is_wired_and_uses_only_text_nodes():
     block = source[source.index("function renderQueueCard") : source.index("function renderRows")]
     assert "U.queueSummary" in block and "U.duration" in block
     assert "innerHTML" not in block and "insertAdjacentHTML" not in block
+
+
+def test_stacked_list_cells_carry_their_own_labels_and_touch_targets_are_large():
+    """Below 760 px the header row is hidden: values that are not self-explanatory ("1", "just now") need a label,
+    and on touch devices the secondary controls need 44 px targets, not only the primary buttons."""
+    script = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
+    for label in ("Gate score", "Attempts", "Submitted"):
+        assert f'dataset.label = "{label}"' in script
+    narrow = styles[styles.index("@media (max-width: 760px)") :]
+    assert "td[data-label]::before" in narrow and "attr(data-label)" in narrow
+    start = styles.index("@media (pointer: coarse)")
+    coarse = styles[start : styles.index("\n}\n", start)]
+    for selector in (".btn.tiny", ".seg-btn", ".icon-btn", ".gate summary"):
+        assert selector in coarse
