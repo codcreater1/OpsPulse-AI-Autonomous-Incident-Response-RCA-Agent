@@ -203,7 +203,18 @@ def docker(cfg: Any, run: Callable[[list[str]], int] | None = None) -> list[Find
             Finding(
                 FAIL,
                 "docker",
-                f"image {cfg.sandbox_image} is not present locally: the sandbox has no network, build or pull it first",
+                f"image {cfg.sandbox_image} is not present locally: the sandbox has no network, build or pull it first "
+                "(it must contain pytest and your project's dependencies; a starting point is "
+                "`docker build -t opspulse-sandbox -f evals/history_tests.Dockerfile evals`)",
+            )
+        ]
+    if cfg.sandbox_image.startswith("python:"):
+        return [
+            Finding(
+                WARN,
+                "docker",
+                f"image {cfg.sandbox_image} is a bare Python image without pytest: every test run will report an "
+                "environment error. Build an image that has pytest and your dependencies and set SANDBOX_IMAGE",
             )
         ]
     return [Finding(OK, "docker", f"daemon answers, image {cfg.sandbox_image} present")]
