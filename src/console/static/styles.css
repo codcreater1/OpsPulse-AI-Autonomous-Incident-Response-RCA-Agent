@@ -165,6 +165,11 @@ tbody tr:last-child td { border-bottom: 0; }
   #incident-table, #incident-table tbody, #incident-table tr, #incident-table td { display: block; width: 100%; }
   #incident-table tr { padding: 14px 16px; border-bottom: 1px solid var(--border); }
   #incident-table td { border: 0; padding: 3px 0; }
+  /* the header row is hidden here, so each value that is not self-explanatory carries its own label */
+  #incident-table td[data-label] { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+  #incident-table td[data-label]::before { content: attr(data-label); min-width: 5.5em; color: var(--muted);
+    font-size: 12px; font-weight: 600; }
+  #incident-table td[data-label] .score-cell { flex: 1; }
   .num { text-align: left; }
   .keys { display: none; }
 }
@@ -341,6 +346,10 @@ h1:focus { outline: none; }
 /* ---- touch: fingers need bigger targets than a mouse pointer ---- */
 @media (pointer: coarse) {
   .btn, .chip-btn, .queue-step, .back, select, input[type="search"], input[type="password"], input[type="text"] { min-height: 44px; }
+  .btn.tiny, .small-btn, .seg-btn { min-height: 44px; }
+  .seg-btn, .icon-btn { min-width: 44px; }
+  .brand, .gate summary, .reported summary { min-height: 44px; display: flex; align-items: center; }
+  .brand { display: inline-flex; }
   .queue-step { width: 44px; height: 44px; }
   .back { display: inline-flex; align-items: center; }
   .repo-link { display: inline-block; padding: 6px 0; }

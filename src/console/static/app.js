@@ -343,13 +343,19 @@ function renderRows() {
     box.title = "Deterministic rubric score from the quality gate, not a probability of being correct";
     box.append(el("span", score.toFixed(2), "score-num"), meter(score, toneForScore(score)));
     scoreCell.append(box);
+    // On narrow screens the header row is hidden and the cells stack; the labels keep a bare "1" or "just now" readable.
+    scoreCell.dataset.label = "Gate score";
+
+    const attemptsCell = el("td", item.iterations, "num");
+    attemptsCell.dataset.label = "Attempts";
 
     const when = el("td", ago(item.created_at));
+    when.dataset.label = "Submitted";
     when.dataset.created = item.created_at || "";
     when.title = fullDate(item.created_at);
     if (item.submitted_by) when.append(el("span", item.submitted_by, "file"));
 
-    row.append(statusCell, repoCell, scoreCell, el("td", item.iterations, "num"), when);
+    row.append(statusCell, repoCell, scoreCell, attemptsCell, when);
     row.addEventListener("click", (event) => {
       if (event.target.closest("a")) return; // the link navigates by itself (middle-click, copy link, ...)
       location.hash = target;
