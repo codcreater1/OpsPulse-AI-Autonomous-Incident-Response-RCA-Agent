@@ -11,6 +11,11 @@ All notable changes are listed here. Versions of behaviour-critical components a
   versions measured earlier on 5 cases, which `docs/LIMITATIONS.md` now says.
 
 ### Changed
+- `pilot_check`: a missing sandbox image now says how to build a starting one, and a bare `python:*` image (no pytest) gets a
+  warning instead of a green "present".
+- CI: the Docker job also builds `opspulse-history-tests`, so the history builder's container test runs there instead of skipping.
+
+### Changed
 - `evals.history_real_repo` runs a repository's tests in a Docker container by default (no network, read-only root, no
   capabilities, unprivileged user, memory/CPU/process/time caps) instead of on the host. Build the image with
   `docker build -t opspulse-history-tests -f evals/history_tests.Dockerfile evals`; a host interpreter can still be passed
