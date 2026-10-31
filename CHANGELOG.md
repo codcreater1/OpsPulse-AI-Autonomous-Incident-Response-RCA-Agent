@@ -78,6 +78,11 @@ All notable changes are listed here. Versions of behaviour-critical components a
   headings and monospace for facts (ids, files, scores, statuses), square status stamps instead of rounded pills, a new favicon and
   logotype. Only `styles.css` and the favicon changed (no markup or script change, the CSP rules and tests are unchanged); contrast
   was re-measured over every visible text element in both themes (no failures) and the README screenshots were regenerated.
+- **Console depth and motion** (CSS 3D, no libraries, no new network requests): staggered perspective entrances for the list rows and
+  detail cards, a tactile ink primary button, status badges that land like a stamp, score bars that fill, a decision card that
+  follows the pointer by up to 2 degrees, 3D toasts and dialog, and a slowly turning stack of plates (the layers of evidence) on
+  the first-run screen. Everything that moves sits inside `prefers-reduced-motion: no-preference`; the tilt is also off on touch
+  and while typing; entrances play on a fresh load only, never on a search keystroke or a filter change.
 
 ## [1.9.0] - 2026-10-27
 
