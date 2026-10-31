@@ -5,6 +5,10 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Fixed
+- Unit tests did not pin `SANDBOX_ENABLED`, so a developer's local `.env` with the sandbox on made
+  `test_a_forged_sandbox_key_from_the_model_is_ignored` fail. The sandbox settings are pinned like every other setting.
+
 ### Added
 - CI: a macOS job (`macos-15`, Python 3.11) runs the unit tests and `scripts.e2e_flow`; the demo scripts had failed on a Mac while
   every Linux job was green. The runner-label test now accepts a pinned `macos-NN` next to `ubuntu-NN.NN`.
