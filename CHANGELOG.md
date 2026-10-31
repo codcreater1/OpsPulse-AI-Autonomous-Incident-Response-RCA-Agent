@@ -6,6 +6,23 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Added
+- CI: a macOS job (`macos-15`, Python 3.11) runs the unit tests and `scripts.e2e_flow`; the demo scripts had failed on a Mac while
+  every Linux job was green. The runner-label test now accepts a pinned `macos-NN` next to `ubuntu-NN.NN`.
+
+### Documentation
+- CONTRIBUTING: how to set up Python 3.11 with uv (macOS ships 3.9), how to run Docker Desktop's CLI and the opt-in Docker tests, and
+  three macOS gotchas (symlinked temp directories, zsh word splitting, keeping the Groq key out of command lines).
+
+### Documentation
+- `docs/MEASUREMENTS.md`: every measured number by version with its 95 % Wilson interval, led by the finding that a passing
+  gate does not mean a correct fix. Added to the docs site.
+
+### Added
+- `evals.repro_eval` keeps each run's patch, and `history_real_repo verify` accepts its report: every patch is run against
+  the real regression test and paired with the model's own reproduction-test outcome, to measure whether the model's test
+  predicts the real one.
+
+### Added
 - First measurement on 20 real bug-fix cases from 6 libraries (`evals/results/history-real20-*`): of 27 gate-accepted runs, 18 passed the real
   regression test (67 %, interval 48-81 %). It also shows the run-to-run noise is larger than the differences between prompt/gate
   versions measured earlier on 5 cases, which `docs/LIMITATIONS.md` now says.
