@@ -5,6 +5,10 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Fixed
+- `pilot_check` now warns when `SANDBOX_COMMAND` contains `-x` (an older `.env.example` shipped it): the sandbox would stop at the same
+  first failure before and after the patch, hiding the comparison added in the failing-test fix.
+
 ### Documentation
 - RUNBOOK: a table of the sandbox verdicts (what each means and what the reviewer does), including `partly_fixed` and why the
   default `SANDBOX_COMMAND` has no `-x`.
