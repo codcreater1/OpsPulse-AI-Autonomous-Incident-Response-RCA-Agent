@@ -5,6 +5,11 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Added
+- `python -m scripts.pilot_digest`: a one-screen digest of the incidents waiting for a reviewer (title, first line of the error, the
+  model's category, file, patch size, sandbox verdict, number of listed uncertainties). It states facts and gives no recommendation;
+  the key comes from `OPSPULSE_API_KEY` and is never printed.
+
 ### Fixed
 - `pilot_check` now warns when `SANDBOX_COMMAND` contains `-x` (an older `.env.example` shipped it): the sandbox would stop at the same
   first failure before and after the patch, hiding the comparison added in the failing-test fix.
