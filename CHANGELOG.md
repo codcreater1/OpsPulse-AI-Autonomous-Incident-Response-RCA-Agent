@@ -11,6 +11,10 @@ All notable changes are listed here. Versions of behaviour-critical components a
 - CodeQL "weak hashing of sensitive data" in `authenticate`: kept, now explained in a comment and pinned by a test. API keys are
   256 random bits from `scripts.make_api_key`, for which SHA-256 is the right hash; a slow password hash would only slow every request.
 
+### Fixed
+- `test_heartbeat_renews_the_lease_while_work_runs_and_stops_after` slept a fixed 0.3 s and expected two lease renewals; a slow
+  macOS CI runner managed one. It now waits (up to 5 s) until two renewals have happened. Test-only; `LeaseHeartbeat` is unchanged.
+
 ### Added
 - `python -m scripts.pilot_digest`: a one-screen digest of the incidents waiting for a reviewer (title, first line of the error, the
   model's category, file, patch size, sandbox verdict, number of listed uncertainties). It states facts and gives no recommendation;
