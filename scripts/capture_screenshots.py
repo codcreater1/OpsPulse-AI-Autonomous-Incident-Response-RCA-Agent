@@ -70,7 +70,7 @@ def pick_incident(base: str, status: str | None = None) -> str | None:
     items = [i for i in items if status is None or i["status"] == status]
     if not items:
         return None
-    return max(items, key=lambda i: (i["iterations"], i["status"] == "needs_review"))["incident_id"]
+    return str(max(items, key=lambda i: (i["iterations"], i["status"] == "needs_review"))["incident_id"])
 
 
 def shoot(browser: str, url: str, out: pathlib.Path, size: tuple[int, int]) -> None:
