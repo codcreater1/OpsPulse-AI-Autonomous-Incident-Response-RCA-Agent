@@ -252,7 +252,7 @@ def run(quiet: bool = False) -> dict[str, Any]:
             events == ["submitted", "analysed", "proposed", "approved", "pr_opened"],
             " > ".join(events),
         )
-        approval_event = next((e for e in audit["events"] if e["event"] == "approved"), {})
+        approval_event: dict[str, Any] = next((e for e in audit["events"] if e["event"] == "approved"), {})
         log.check(
             "the decision names who and why",
             approval_event.get("actor") == "bob" and "contract" in approval_event.get("detail", ""),
