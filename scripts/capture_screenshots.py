@@ -19,6 +19,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 IMAGES = ROOT / "docs" / "images"
@@ -45,10 +46,11 @@ def find_browser() -> str | None:
     return None
 
 
-def _get(url: str, key: str = "") -> dict:
+def _get(url: str, key: str = "") -> dict[str, Any]:
     request = urllib.request.Request(url, headers={"X-API-Key": key} if key else {})  # noqa: S310 - local URL
     with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
-        return json.loads(response.read())
+        data: dict[str, Any] = json.loads(response.read())
+        return data
 
 
 def wait_ready(base: str, seconds: int = 90) -> None:
