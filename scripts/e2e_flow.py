@@ -93,7 +93,7 @@ def run(quiet: bool = False) -> dict[str, Any]:
         from scripts.demo import run as run_in_sandbox
         from src.agent.graph import build_graph
         from src.agent.patching import apply_unified_diff
-        from src.integrations.github import PullRequestResult
+        from src.integrations.github import PullRequestResult, create_fix_pull_request
         from src.main import app
         from src.services import incident_service, remediation_service
         from src.worker import Worker
@@ -132,7 +132,7 @@ def run(quiet: bool = False) -> dict[str, Any]:
         incident_service.get_graph = lambda: graph  # type: ignore[assignment]
         pull_requests: list[dict[str, Any]] = []
 
-        real_create_fix_pull_request = remediation_service.create_fix_pull_request
+        real_create_fix_pull_request = create_fix_pull_request
 
         def record_pull_request(**kwargs: Any) -> PullRequestResult:
             pull_requests.append(kwargs)
