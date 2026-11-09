@@ -88,7 +88,7 @@ def run(quiet: bool = False) -> dict[str, Any]:
         from fastapi.testclient import TestClient
 
         from evals.dataset import EvalCase, Expected
-        from evals.harness import ScriptedModel, local_history, local_source_fetcher
+        from evals.harness import ScriptedModel, local_history, local_source_fetcher, scripted_factory
         from scripts.demo import MOCK_REPLY, SERVICE, pytest_cmd
         from scripts.demo import run as run_in_sandbox
         from src.agent.graph import build_graph
@@ -128,8 +128,7 @@ def run(quiet: bool = False) -> dict[str, Any]:
             expected=Expected(root_cause_category="null_reference", inconclusive=False),
             mock_replies=[MOCK_REPLY],
         )
-        model = ScriptedModel(case)
-        graph = build_graph(local_source_fetcher(case), local_history(case), lambda temperature: model)
+        graph = build_graph(local_source_fetcher(case), local_history(case), scripted_factory(ScriptedModel(case)))
         incident_service.get_graph = lambda: graph  # type: ignore[assignment]
         pull_requests: list[dict[str, Any]] = []
 
