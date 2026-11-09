@@ -25,6 +25,7 @@ import subprocess
 import sys
 import tempfile
 from datetime import UTC, datetime
+from typing import Any
 
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 
@@ -66,7 +67,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.live and not settings.groq_api_key:
         raise SystemExit("--live needs GROQ_API_KEY")
-    report: dict = {"started_at": datetime.now(UTC).isoformat(), "model": settings.model_name if args.live else "MOCK"}
+    report: dict[str, Any] = {
+        "started_at": datetime.now(UTC).isoformat(),
+        "model": settings.model_name if args.live else "MOCK",
+    }
 
     with tempfile.TemporaryDirectory(prefix="opspulse-demo-") as tmp:
         work = pathlib.Path(tmp) / "service"
