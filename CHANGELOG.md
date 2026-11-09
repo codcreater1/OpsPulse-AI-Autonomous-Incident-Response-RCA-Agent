@@ -5,6 +5,12 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Changed
+- `mypy` (and so the CI lint job) now also checks `scripts/`, which had 12 type errors that nothing ran: untyped `dict`s and JSON
+  returns in `capture_screenshots`/`demo`, a model stand-in passed where a `Runnable` is declared (new typed helper
+  `evals.harness.scripted_factory`), a pydantic default that type checkers could not see (`Expected.note`) and a PR function taken from a re-export.
+  No behaviour changes.
+
 ### Security
 - CodeQL "bad HTML filtering regexp" in `tests/unit/test_console.py`: the CSP guard test searched the page with regexes, which miss
   forms like `</script >` or odd quoting. It now uses `html.parser`, with a test showing what the old regexes would have missed.
