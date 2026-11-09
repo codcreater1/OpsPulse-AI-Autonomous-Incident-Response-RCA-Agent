@@ -142,7 +142,7 @@ def run(quiet: bool = False) -> dict[str, Any]:
                 return result
             return PullRequestResult("https://github.com/demo/inventory/pull/1", 1, "opspulse/fix-e2e", False)
 
-        remediation_service.create_fix_pull_request = record_pull_request  # type: ignore[assignment]
+        remediation_service.create_fix_pull_request = record_pull_request  # type: ignore[assignment,attr-defined]
 
         client = TestClient(app)
         reporter = {"Authorization": f"Bearer {REPORTER_KEY}"}
