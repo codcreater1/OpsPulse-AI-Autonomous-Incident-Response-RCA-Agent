@@ -5,6 +5,12 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Tests
+- `github.download_repository_snapshot` (downloads and unpacks an archive from a repository we do not control) had no test at
+  all; coverage of `src/integrations/github.py` was 84%. New tests cover the happy path, the download size cap, a corrupt
+  archive, an HTTP failure whose message must not leak the URL, and a GitHub error before the download; each also checks that the
+  temporary archive is removed. No production code changed.
+
 ### Changed
 - `mypy` (and so the CI lint job) now also checks `scripts/`, which had 12 type errors that nothing ran: untyped `dict`s and JSON
   returns in `capture_screenshots`/`demo`, a model stand-in passed where a `Runnable` is declared (new typed helper
