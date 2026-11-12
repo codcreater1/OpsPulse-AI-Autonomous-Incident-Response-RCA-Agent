@@ -70,6 +70,13 @@ def get_graph() -> CompiledStateGraph[Any, Any, Any, Any]:
     return build_graph(github.fetch_source_context, repositories.find_similar_incidents)
 
 
+def _without_nul(text: str) -> str:
+    """PostgreSQL text columns cannot hold NUL (U+0000): the driver rejects the whole statement, which would surface as
+    a server error (or, mapped from a database exception, a 503 that Sentry and Alertmanager retry forever). SQLite
+    accepts it, so tests on SQLite never noticed. NUL carries no diagnostic value in an error message or a note."""
+    return text.replace("\x00", "")
+
+
 def submit_incident(
     incident_id: uuid.UUID,
     repo_name: str,
@@ -79,6 +86,7 @@ def submit_incident(
     commit_sha: str | None = None,
 ) -> tuple[dict[str, Any], bool]:
     """Persist a new `queued` incident, or return the existing one for a repeated delivery."""
+    error_message, stack_trace = _without_nul(error_message), _without_nul(stack_trace)
     fingerprint = compute_fingerprint(repo_name, error_message, stack_trace)
     try:
         row, created = repositories.create_incident(
@@ -405,6 +413,7 @@ def decide_remediation(
     incident_id: uuid.UUID, approval_id: uuid.UUID, patch_sha256: str, approve: bool, reviewer: str, note: str | None
 ) -> dict[str, Any]:
     """Apply a human approval/rejection. Raises IncidentNotFoundError, ApprovalError, DatabaseUnavailableError."""
+    note = _without_nul(note) if note else note
     token = incident_id_var.set(str(incident_id))
     try:
         row = repositories.get_incident(incident_id)
