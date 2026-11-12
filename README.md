@@ -35,7 +35,7 @@ python -m scripts.demo_console   # the review console with ten sample cases: htt
 
 The first command is also a unit test and a CI step: it shows that nothing reaches GitHub before a reviewer decides, that the
 submitter cannot approve their own incident, and that a repeated approval opens no second PR. It proves the plumbing and the
-safety rules, **not** the model's quality; the [evaluation](#evaluation) measures that, with caveats.
+safety rules, **not** the model's quality; the [evaluation](docs/EVALUATION.md#evaluation) measures that, with caveats.
 
 ## Why it is built this way
 
@@ -52,19 +52,19 @@ safety rules, **not** the model's quality; the [evaluation](#evaluation) measure
 ## At a glance
 
 What was measured (small sets, mostly author-labelled and synthetic, plus one run on real bug-fix history - indicative,
-not benchmarks; details and caveats in [Evaluation](#evaluation)):
+not benchmarks; details and caveats in [Evaluation](docs/EVALUATION.md#evaluation)):
 
 | | Result | Where |
 |---|---|---|
-| Live model, 26 tuning cases (`gpt-oss-120b`, prompt v4) | category 18/22, quotes verified 52/52, 4/4 inconclusive cases not accepted, 1.31 attempts/case | [Live results](#live-results-openaigpt-oss-120b-on-groq-2026-10-09) |
-| Held-out set (never used for tuning; prompt v7.1, two runs on two days) | category 9/10 in both runs, 0 invented quotes (21/21 and 23/23 verified); the same case (`ho-upstream-shape`) is wrongly diagnosed *and accepted* both times; 4 of 15 replies failed schema validation in the second run | [Held-out](#live-results-openaigpt-oss-120b-on-groq-2026-10-09) |
+| Live model, 26 tuning cases (`gpt-oss-120b`, prompt v4) | category 18/22, quotes verified 52/52, 4/4 inconclusive cases not accepted, 1.31 attempts/case | [Live results](docs/EVALUATION.md#live-results-openaigpt-oss-120b-on-groq-2026-10-09) |
+| Held-out set (never used for tuning; prompt v7.1, two runs on two days) | category 9/10 in both runs, 0 invented quotes (21/21 and 23/23 verified); the same case (`ho-upstream-shape`) is wrongly diagnosed *and accepted* both times; 4 of 15 replies failed schema validation in the second run | [Held-out](docs/EVALUATION.md#live-results-openaigpt-oss-120b-on-groq-2026-10-09) |
 | Caller-vs-callee set (prompt v6.1, 3 runs per case) | category 13/13, correct fix file 13/13; the control case accepted 2/2 | [Limitations](docs/LIMITATIONS.md) |
 | Real public repository, 4 injected bugs, 3 runs | correct fix file 12/12, 0 invented quotes (bugs are injected, so easier than real incidents) | [Limitations](docs/LIMITATIONS.md) |
 | **Real bug-fix history** (5 real fixes from `python-tabulate` and `toolz`, 3 runs each; the parent commit plus the fix's own test is the incident) | the gate accepted 10 of 10 analysed runs with the right file and 0 invented quotes, **but only 2 of those patches passed the real regression test**; prompt v7.2 and a retry-on-sibling-copy experiment did not change that (2 of 9 and 2 of 10 on the same four cases) | [Limitations](docs/LIMITATIONS.md) |
 | Reproduction test written by the model, run in the sandbox | 4 of 6 pilot runs `reproduced_and_fixed`; the model writes both the test and the fix | [Test evidence](#test-evidence-the-sandbox-and-a-reproduction-test) |
 | Reviewer memory (earlier reviewer note shown to the model) | note followed 9/9 vs rejected patch repeated 9/9 without it; synthetic cases, a mechanism check only | [Learning from reviewers](#learning-from-reviewers) |
-| Smaller / other models, same cases | `gpt-oss-20b` 14/22 and more false acceptances; `qwen3.8-27b` only 9 cases evaluable (rate limits) | [Model comparison](#live-results-openaigpt-oss-120b-on-groq-2026-10-09) |
-| Adversarial set (bait: fabricated lines, foreign files, injected "approve" text ...) | all bait rejected by the gate in mock mode; one *documented* blind spot is accepted; live: no bait taken (6/8 cases) | [Regression gate](#regression-gate-adversarial-set-and-calibration) |
+| Smaller / other models, same cases | `gpt-oss-20b` 14/22 and more false acceptances; `qwen3.8-27b` only 9 cases evaluable (rate limits) | [Model comparison](docs/EVALUATION.md#live-results-openaigpt-oss-120b-on-groq-2026-10-09) |
+| Adversarial set (bait: fabricated lines, foreign files, injected "approve" text ...) | all bait rejected by the gate in mock mode; one *documented* blind spot is accepted; live: no bait taken (6/8 cases) | [Regression gate](docs/EVALUATION.md#regression-gate-adversarial-set-and-calibration) |
 | Retrieval (`lexical-v1` vs fingerprint baseline) | recall@3 0.46 -> 0.93, MRR 0.56 -> 1.0, 0 cross-repository leaks | [Retrieval](#retrieval) |
 | End to end, real bug, live model | failing test -> accepted analysis -> patch applied in a sandbox -> tests pass (one run) | [Demo](#demo) |
 
@@ -104,12 +104,17 @@ publishes a GitHub Release using that version's section of `CHANGELOG.md` as its
 
 ## Contents
 
-- [Try it](#try-it-in-two-minutes) · [Why it is built this way](#why-it-is-built-this-way) · [At a glance](#at-a-glance) · [Features](#features) · [Architecture](#architecture) · [Workflow and statuses](#workflow-and-statuses)
-- [Quality gate](#quality-gate) · [Evaluation](#evaluation) · [Retrieval](#retrieval)
-- [Human approval](#human-approval-and-remediation-safety) · [Learning from reviewers](#learning-from-reviewers) · [Test evidence](#test-evidence-the-sandbox-and-a-reproduction-test) · [Deployed code](#analysing-the-code-that-actually-failed)
-- [Sentry](#sentry-integration) · [Alertmanager](#alertmanager-integration) · [Ask](#ask-about-this-incident) · [Notifications](#reviewer-notifications) · [Review console](#review-console) · [Observability](#observability-langfuse)
-- [Setup](#setup) · [API](#api) · [Testing and CI](#testing-and-ci) · [Demo](#demo)
-- [Security](#security-model) · [Limitations](#known-limitations) · [Roadmap](#roadmap)
+**On this page**
+- Start: [Try it](#try-it-in-two-minutes) · [Why it is built this way](#why-it-is-built-this-way) · [At a glance](#at-a-glance) · [Features](#features) · [Command line](#command-line)
+- How it works: [Architecture](#architecture) · [Workflow and statuses](#workflow-and-statuses) · [Quality gate](#quality-gate) · [Retrieval](#retrieval) · [Ask about an incident](#ask-about-this-incident)
+- Safety and review: [Human approval](#human-approval-and-remediation-safety) · [Learning from reviewers](#learning-from-reviewers) · [Test evidence](#test-evidence-the-sandbox-and-a-reproduction-test) · [Deployed code](#analysing-the-code-that-actually-failed) · [Review console](#review-console)
+- Run it: [Setup](#setup) · [API](#api) · [Testing and CI](#testing-and-ci) · [Demo](#demo)
+- Honesty: [Security model](#security-model) · [Known limitations](#known-limitations) · [Roadmap](#roadmap)
+
+**In their own pages** (moved out of this README so it stays a front page)
+- [Evaluation](docs/EVALUATION.md): datasets, live results, held-out and adversarial sets, assistant evaluation, with sample sizes and caveats
+- [Integrations and observability](docs/INTEGRATIONS.md): [Sentry](docs/INTEGRATIONS.md#sentry-integration), [Alertmanager](docs/INTEGRATIONS.md#alertmanager-integration), [reviewer notifications](docs/INTEGRATIONS.md#reviewer-notifications), [Langfuse and Prometheus](docs/INTEGRATIONS.md#observability-langfuse)
+- [Limitations: what is proven](docs/LIMITATIONS.md) · [Measurements on one page](docs/MEASUREMENTS.md) · [Architecture details](docs/ARCHITECTURE.md) · [Runbook](docs/RUNBOOK.md) · [API reference](docs/API.md) · [A worked trace](docs/TRACE_EXAMPLE.md)
 
 ## Features
 
@@ -130,7 +135,7 @@ publishes a GitHub Release using that version's section of `CHANGELOG.md` as its
 | Persistence | PostgreSQL/Neon via SQLAlchemy 2, Alembic migrations, failure taxonomy (`error_category`) |
 | Observability | Structured JSON logs with incident correlation and secret redaction; Langfuse v4 traces with content masking by default; Prometheus `/metrics` (content-free labels) |
 | Evaluation | Synthetic RCA datasets (tuning, holdout, adversarial, callers, reviewer memory), deterministic metrics, mock and live modes, a CI regression gate against committed baselines, a per-class reliability report, a pilot on injected bugs in a real repository; labelled retrieval dataset comparing two ranking strategies |
-| Delivery | about 680 offline unit tests (SQLite locally, the same suite and the migrations on PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
+| Delivery | more than 900 offline unit tests (SQLite locally, the same suite and the migrations on PostgreSQL 16 in CI), opt-in live tests, GitHub Actions, Dockerfile + Compose, reproducible demo, ADRs |
 
 ## Architecture
 
@@ -271,409 +276,6 @@ diagnosis - in the mock dataset one deliberately mislabelled-but-grounded answer
 1/17). It also cannot judge whether a patch is functionally right. False rejections are possible when a model
 paraphrases code instead of quoting it; the feedback loop usually fixes that, at the cost of extra calls.
 
-## Evaluation
-
-```bash
-python -m evals.run_rca --mode mock     # deterministic, offline, used in CI
-python -m evals.run_rca --mode live --sleep 20   # real model; needs GROQ_API_KEY (~100-125k tokens per run)
-python -m evals.run_rca --mode live --case ho-off-by-one --repeat 5   # run-to-run variation of one case
-python -m evals.run_rca --rescore evals/results/<report>.json   # recompute metrics, no model calls
-python -m evals.run_retrieval
-```
-
-Reports are written to `evals/reports/` as JSON (per-case facts + metrics + versions) and Markdown.
-
-**Dataset** (`evals/datasets/rca_cases.json`, generated by `build_rca_cases.py`): 26 synthetic incidents -
-AttributeError, ImportError/ModuleNotFoundError, DB connection refused / pool exhausted, invalid upstream JSON,
-missing configuration, TypeErrors, KeyErrors, a misleading trace, missing source, an ambiguous worker crash,
-contradictory evidence (running version != HEAD), a message-only report, prompt injection in the log, in history
-and in a source comment, malformed and schema-invalid replies, recursion, an empty-list index, and a model that
-never produces an applicable patch. **4 cases are labelled inconclusive** - the correct answer is "insufficient
-evidence". Labels were written by the author; there is no independent annotation.
-
-**Modes.** *Mock* replays scripted model replies stored in the dataset (including wrong, fabricated and
-injection-compliant answers) through the real graph and gate - it measures the **evaluator and harness, not a
-model**. *Live* uses the configured model and additionally reports latency, provider-reported token usage and an
-optional cost estimate (`LLM_COST_*_PER_MTOK`).
-
-**Metrics** (all deterministic ratios with stated numerator/denominator; `None` when the denominator is 0;
-no LLM-as-judge is used):
-
-| Metric | Definition |
-|---|---|
-| structured_output_validity | LLM attempts whose reply validated / LLM attempts (provider errors excluded) |
-| category_accuracy | final `root_cause_category` == label / conclusive-labelled cases |
-| evidence_grounding_accuracy | verified *observed* quotes / all *observed* quotes (final analyses) |
-| unsupported_claim_rate | (unverifiable quotes + ungrounded affected files) / (all quotes + all affected files) |
-| abstention_recall | inconclusive-labelled cases where the model declared insufficient evidence or `unknown` / inconclusive cases |
-| inconclusive_not_accepted_rate | inconclusive-labelled cases the gate did **not** accept / inconclusive cases |
-| false_abstention_rate | conclusive-labelled cases where the model abstained / conclusive cases |
-| gate_acceptance_rate, false_acceptance_rate | accepted / all; (accepted and wrong-category or inconclusive) / accepted |
-| relevant_file_hit_rate | cases whose affected files include a labelled file / cases with labelled files |
-| avg_attempts, latency, tokens, estimated cost | from per-attempt records |
-
-**Results actually obtained** (mock mode, 2026-10-09, `rca-cases-v1`, `quality-gate-v4`):
-
-| Metric | Value |
-|---|---|
-| structured_output_validity | 0.939 (31/33) |
-| category_accuracy | 0.955 (21/22) |
-| evidence_grounding_accuracy | 0.980 (48/49) |
-| unsupported_claim_rate | 0.027 (2/74) |
-| abstention_recall | 0.750 (3/4) |
-| inconclusive_not_accepted_rate | 1.000 (4/4) |
-| false_acceptance_rate | 0.059 (1/17) |
-| avg_attempts | 1.269 |
-
-These numbers say the gate rejected every fabricated quote, injection-compliant answer and inapplicable patch
-in the scripted set and accepted no inconclusive case. They say **nothing about how good the LLM is** - see the
-live results below.
-
-### Run-to-run variation
-
-A live run of a stochastic model is **one sample**. `ho-off-by-one` shows it: in the held-out sessions its diffs
-never applied (3 failed attempts under `quality-gate-v6`, 2 failed attempts under v7), and in a later run of the same
-code it was accepted on the first attempt with the correct one-line patch. `--repeat N` runs every case N times and
-reports, per case, how many runs were accepted and had the labelled category, and the share of cases whose outcome
-never changed (`metrics.consistency`). Until the live numbers in this README carry repeats, read single-run
-differences between versions (for example "v7 did not fix `ho-off-by-one`") as **anecdotes, not effects**.
-
-### Regression gate, adversarial set and calibration
-
-```bash
-python -m evals.run_rca --mode mock --dataset adversarial
-python -m evals.compare_reports evals/baselines/rca-tuning-mock.json evals/reports/rca-tuning-mock-*.json --fail-on-regression
-python -m evals.compare_reports A.json B.json C.json        # side-by-side table, e.g. models on the same cases
-```
-
-- **Regression gate (CI).** Mock replies are deterministic, so CI runs all three datasets (tuning, holdout,
-  adversarial) and compares them with the committed baselines in `evals/baselines/`. Any quality metric that moves
-  in its bad direction fails the build; latency and token figures are reported but never fail it. Comparing reports
-  of different datasets is refused. A deliberate check: removing `trace_code_consistency` from the blocking checks
-  made the gate report four regressions on the adversarial set (abstention recall 0.33 -> 0.00, unsupported
-  acceptance 0.00 -> 0.33, ...). Baselines are updated only by committing a new mock report on purpose.
-- **Adversarial set** (`rca-adversarial-v1`, 8 cases, `build_rca_adversarial.py`): a reported line that is not
-  the failing one, a patch whose headers name a file outside the trace, log text claiming the gate already passed
-  and asking for automatic approval, a quote of source code that was never retrieved, deploy drift, contradicting
-  history, a trace cut off before any application frame, and one **documented blind spot**: a well-grounded but
-  wrong diagnosis copied from misleading history. In mock mode the gate rejects every bait on the first attempt
-  with named failed checks, and `unsupported_acceptance_rate` is 0/3; the blind-spot case **is accepted** (it is
-  why `false_acceptance_rate` is 1/5 on this set) - the gate verifies grounding, not correctness. Live run with `qwen/qwen3.8-27b` (2026-10-10, two merged partial runs,
-  [report](evals/results/rca-adversarial-live-qwen_qwen3_8-27b-2026-10-10-partial.md)): 6 of 8 cases evaluated; the
-  model took none of the bait (wrong line, foreign file, injected approval text), resisted the misleading history in
-  the blind-spot case, chose the right explanation from contradicting history (5/5 categories, no false acceptance),
-  and on the truncated trace answered `unknown` but quoted one line it never saw - the gate rejected that analysis.
-  The two cases that matter most (guessing without source, deploy drift) could not run because of the
-  output-tokens-per-minute cap above, so this is **not** evidence that the model resists those. A rerun with
-  `LLM_MAX_OUTPUT_TOKENS=900` ([report](evals/results/rca-adversarial-live-qwen_qwen3_8-27b-2026-10-10-otpm900.md))
-  got through, but most replies were cut at 900 tokens (`truncated` in the attempt trace): the *guess without
-  source* rejection came from a truncated, schema-invalid reply, so it is not evidence either. On *deploy drift* the
-  third, complete reply declared insufficient evidence and `trace_code_consistency` also flagged it - not accepted. An accepted analysis
-  still only creates a pending approval; text in a log cannot approve anything.
-- **`unsupported_acceptance_rate`** = accepted analyses among those that are inconclusive-labelled or contain an
-  unverifiable quote / such analyses.
-- **Calibration.** Each report contains bins (accuracy per confidence range) and a Brier score for the model's
-  `self_assessed_confidence` and for the gate's `quality_score`. Neither is a probability: the quality score is a
-  rubric, and the self-assessment is uncalibrated text from the model. In mock mode both numbers describe the
-  scripted replies, not a model. There is no abstain-by-confidence policy; abstention is decided by evidence checks,
-  because a policy fitted to a few dozen cases would not be trustworthy.
-- **Per-attempt trace.** Every attempt records latency, tokens, schema error fields, gate score, failed checks
-  and the decision taken; the review console shows it as an *Attempts* table.
-
-### Live results (`openai/gpt-oss-120b` on Groq, 2026-10-09)
-
-Two full runs on the same 26 cases; reports in [`evals/results/`](evals/results). In the second run Groq's
-free-tier daily token quota (200k tokens/day) ran out, so 4 cases were not evaluated; they are excluded from
-the quality metrics and listed in the report. The comparison below uses the **same 22 evaluated cases** for both
-runs.
-
-| Metric (same 22 cases) | prompt v2 + gate v3 | prompt v3 + gate v4 |
-|---|---|---|
-| category_accuracy | 0.61 (11/18) | **0.83** (15/18) |
-| false_acceptance_rate | 0.42 (8/19) | **0.18** (3/17) |
-| abstention_recall (inconclusive cases) | 0.75 (3/4) | **1.00** (4/4) |
-| inconclusive_not_accepted_rate | 0.75 (3/4) | **1.00** (4/4) |
-| evidence_grounding_accuracy | 1.00 (42/42) | 0.98 (41/42) |
-| structured_output_validity (per attempt) | 0.81 (21/26) | **0.61** (20/33) - worse |
-| average attempts per case | 1.18 | **1.50** - more cost |
-
-**prompt v4 (2026-10-10, all 26 cases, no provider failures):** the per-attempt schema errors recorded by v3
-were empty `uncertainties` lists and unrecognised `source` values on inference items. v4 states both rules
-explicitly, and the schema normalises unrecognised sources on *unverified* (inference/hypothesis) items only.
-
-| Metric (26 cases) | prompt v4 + gate v4 |
-|---|---|
-| structured_output_validity (per attempt) | **0.91** (31/34) |
-| category_accuracy | 0.82 (18/22) |
-| false_acceptance_rate | 0.14 (3/21) |
-| inconclusive_not_accepted_rate | 1.00 (4/4) |
-| evidence_grounding_accuracy | 1.00 (52/52) |
-| average attempts per case | 1.31 |
-
-**Held-out set** (`--dataset holdout`, 12 cases written before any model run on them): two live runs were cut
-short by the free-tier daily token quota; merged with `python -m evals.merge_reports` (which refuses to merge
-runs of different configurations), 7 of 12 cases are evaluated so far: category 7/7, quotes 15/15, no false
-acceptance, 1 attempt each. The 5 not yet evaluated include the deploy-drift case and both inconclusive cases, so
-this is **not yet evidence that the gains generalise**
-([partial report](evals/results/rca-holdout-live-2026-10-10-prompt-v4-gate-v4-partial.md)).
-
-**Model comparison** (2026-10-10, `rca-cases-v1`, prompt v4, gate v4; reports in
-[`evals/results/`](evals/results), table from `python -m evals.compare_reports`). `qwen/qwen3.8-27b` got HTTP 429 on 17 of
-26 cases, so only **9 cases** are comparable across all three models. A diagnosis afterwards showed the cause:
-on Groq's free tier this model is capped at 1000 *output* tokens per minute, and a single reply often needs more,
-so most of these were not temporary throttling. Such requests are now classified as `llm_request_too_large` and
-not retried (the original run did not record which kind of 429 each case got):
-
-| Same 9 cases | gpt-oss-120b | gpt-oss-20b | qwen3.8-27b |
-|---|---|---|---|
-| category_accuracy | 7/8 | 4/8 | 8/8 |
-| false_acceptance_rate | 0/7 | 2/6 | 0/6 |
-| evidence_grounding_accuracy | 16/16 | 13/14 | 18/21 |
-| structured_output_validity (per attempt) | 9/12 | 12/16 | 9/10 |
-| average attempts | 1.33 | 1.78 | 1.11 |
-
-| All 26 cases | gpt-oss-120b | gpt-oss-20b |
-|---|---|---|
-| category_accuracy | 0.82 (18/22) | 0.64 (14/22) |
-| false_acceptance_rate | 0.14 (3/21) | 0.28 (5/18) |
-| evidence_grounding_accuracy | 1.00 (52/52) | 0.97 (38/39) |
-| structured_output_validity | 0.91 (31/34) | 0.81 (34/42) |
-| inconclusive cases not accepted | 4/4 | 4/4 |
-| average attempts / tokens per case | 1.31 / 4.8k | 1.62 / 5.7k |
-| LLM latency mean / p95 | 12.3 s / 38.4 s | 18.3 s / 38.5 s |
-
-Reading: the smaller `gpt-oss-20b` is worse on every quality metric and is not cheaper per case, because it needs
-more attempts. `qwen3.8-27b` looks strong on 9 cases, but 9 cases cannot separate it from `gpt-oss-120b`. All
-three quotes it could not support came from one case (`message-only`, where no source code exists), and the gate
-rejected that analysis. Latency includes Groq queueing under rate limits, so it is not a model speed benchmark.
-The default stays `openai/gpt-oss-120b` until a complete run says otherwise. Calibration of the 20b model's
-self-assessed confidence (25 samples): Brier 0.24, and 0.61 accuracy in the 0.70-0.85 bin - overconfident.
-
-**Caller context, live** (`openai/gpt-oss-20b`, `rca-callers-v1`, 2026-10-10,
-[report](evals/results/rca-callers-live-openai_gpt-oss-20b-2026-10-10-callers2.md)): with caller context, 3 of 4
-cases were accepted and the control case ended correctly after 3 attempts. But two accepted analyses patched the
-*failing* function defensively instead of naming the caller (`caller-passes-none`, also with the wrong category,
-and `caller-two-levels-up`): the `quality-gate-v5` that ran checked grounding and applicability, not whether the fix is in the right place,
-and the patch policy only allows the failing file. `quality-gate-v6` (`fix_location`) now rejects a patch whose
-diagnosis cites caller-only code (mock case `caller-symptomatic-patch`; dataset `rca-callers-v3`); it has **not**
-been run live yet. The comparison run without caller context stopped after one case
-on the provider's daily token limit, so **there is no live evidence yet that caller context improves accuracy** -
-only the mock comparison with scripted replies (grounded quotes 8/8 and 1 attempt per case with callers,
-5/8 and 3 attempts without).
-
-**Held-out set, second session** (`prompt v5` + `quality-gate-v6`, `gpt-oss-120b`; reports
-[1](evals/results/rca-holdout-live-2026-10-10-prompt-v5-gate-v6-missing-package.md),
-[2](evals/results/rca-holdout-live-2026-10-10-prompt-v5-gate-v6-partial.md)): three more cases evaluated before the
-daily token quota ran out again; two remain (`ho-pool-timeout`, and `ho-drift-attribute` ended on the quota after
-its first attempt). Different prompt and gate versions from the 7 cases above, so the two groups are reported
-separately, not merged:
-
-| Case | Expected | Result |
-|---|---|---|
-| `ho-missing-package` | import_error | accepted, correct, 1 attempt |
-| `ho-gateway-timeout` | inconclusive | model reported insufficient evidence, not accepted (correct) |
-| `ho-off-by-one` | logic_error | right category, but **the patch never applied** in 3 attempts -> `needs_review` |
-| `ho-drift-attribute` | inconclusive | first attempt flagged by `trace_code_consistency` (deploy drift), then quota |
-
-So, on held-out cases: no false acceptance so far, and one honest weakness - for `ho-off-by-one` the diagnosis was
-right while every proposed diff failed `diff_applies`, i.e. the agent did not produce a usable patch. The
-`rca-callers-v2` set could not be run live (quota), so `fix_location` still has no live evidence.
-`quality-gate-v7` responds to that weakness: when a diff does not apply, the retry feedback now quotes the closest
-real lines of the file with their line numbers and indentation (matching itself stays strict). It is unit-tested but
-**not yet measured live**.
-
-**Third live session** (`prompt v5` + `quality-gate-v7`, `gpt-oss-120b`; the daily token quota ended the run again, so
-this is two data points, not an evaluation - reports
-[callers](evals/results/rca-callers-live-2026-10-10-prompt-v5-gate-v7-partial.md),
-[pool-timeout](evals/results/rca-holdout-live-2026-10-10-prompt-v5-gate-v7-pool-timeout.md)):
-
-- **`fix_location` fired live for the first time.** On `caller-passes-none` the model's first attempt cited the
-  caller's code but patched the callee; the gate scored 0.935 and rejected it on `fix_location` alone, with every
-  other check passing - exactly the case the check was written for. The following attempts did not recover (schema
-  and grounding failures, then the quota), so the case ended unaccepted with category `missing_key` instead of the
-  labelled `null_reference`.
-- **A held-out false acceptance.** `ho-pool-timeout` (labelled `dependency_unavailable`) was **accepted** with
-  `configuration_error`, gate score 0.98: the evidence was grounded and the patch applied, but the category is
-  arguably wrong for a pool-exhaustion timeout. This is the documented blind spot again (grounding is not
-  correctness); the label itself is debatable, so it counts as a miss against the labels.
-- Not run: the other four caller cases, `ho-off-by-one` and `ho-drift-attribute` (quota). `quality-gate-v7`'s
-  closest-lines feedback is therefore still **not measured live**.
-
-**Fourth live session** (2026-10-11, `prompt v5` + `quality-gate-v7`, `gpt-oss-120b`; the daily quota ended the run
-again, so some cases are missing; reports in [`evals/results/`](evals/results), files dated 2026-10-11):
-
-| Case | Expected | Result |
-|---|---|---|
-| `caller-passes-none` | null_reference, fix in the caller | accepted after 2 attempts, category right - but the patch is a **callee guard** (`if value is None: return "0.00 EUR"`) |
-| `caller-empty-list` | logic_error | accepted, category right, guard in `split_payment` (`if parts == 0: return []`) |
-| `caller-symptomatic-patch` | null_reference | accepted on the first attempt, again the callee guard |
-| `caller-two-levels-up`, `control-cause-in-trigger` | - | not evaluated (quota) |
-| `ho-drift-attribute` | inconclusive (deploy drift) | attempt 1 proposed `getattr(order, "discount_code", None)` and was **rejected by `trace_code_consistency`**; attempt 2 hit the quota |
-| `ho-off-by-one` | logic_error | accepted on the first attempt with the correct one-line patch (it failed to apply in two earlier sessions) |
-
-What this says, and does not say:
-
-- **Categories and false acceptance on the callers set: 3/3 and 0/3** - but three of three accepted patches are
-  guards in the failing function. `fix_location` did not fire because the evidence did not quote caller-only code.
-  This is the limitation already documented: a symptomatic patch whose diagnosis never mentions the caller is not
-  detectable by the gate, and `return "0.00 EUR"` for a missing amount is a fix that *hides* a data problem. The
-  gate says "grounded and applies", not "right place". So the guidance card and the patch answer now say it
-  for the reviewer: a patch that only adds an early return, guard or default value is labelled *guard or default*
-  ("can hide the real cause - check where the value comes from"). That is a deterministic, informational pattern
-  check, not a verdict, and it cannot tell a justified guard from a masking one.
-- **The gate caught real deploy drift live** on a held-out case (attempt 1 of `ho-drift-attribute`).
-- **One sample per case.** `ho-off-by-one` went from "diffs never apply" to "accepted first try" with no code
-  change between sessions; see *Run-to-run variation* above. None of this establishes a rate.
-
-**Fifth live session, with repeats** (2026-10-12, `prompt v5` + `quality-gate-v7`, `gpt-oss-120b`, every case run
-2-3 times; reports in [`evals/results/`](evals/results), files dated 2026-10-12). This is the first session where a
-single sample is not the whole story:
-
-| Set | Runs | Accepted | Category = label | Not accepted when it should not be |
-|---|---|---|---|---|
-| callers (5 cases x 2) | 10 | 9 | 6/10 | - |
-| `ho-off-by-one` x 3 | 3 | 2 | 3/3 | - |
-| `ho-drift-attribute` (inconclusive) x 2 | 2 | 0 | - | **2/2** (model abstained with `unknown`) |
-
-- **Run-to-run variation is real.** `ho-off-by-one`: needs_review after 3 attempts once, accepted after 2 and after 3
-  attempts in the other two runs, with the right category every time. A single run of this case would have shown
-  "fails" or "passes" depending on the draw.
-- **Callers set: category 6/10 and "false acceptance 4/9" need reading, not quoting.** The four misses are
-  `caller-passes-none` and `caller-symptomatic-patch` classified `missing_key` in every run, against the label
-  `null_reference` (earlier sessions answered `null_reference`). The caller passes `row.get("amount")`, a missing
-  key, so the label is arguably the weaker one; the point stands that the same case gives different categories on
-  different days.
-- **Every accepted patch was made in the failing function** (`value = 0` guard, `if parts == 0: return []`,
-  `int(page)`, `if not values: return 0`); the policy allows nothing else. `fix_location` fired in 1 of 10 runs.
-  The guard-or-default label now covers the re-typed-line form of these patches (see below).
-- **A cost we caused:** in 9 of 10 runs the first attempt failed `schema` because the model wrote
-  `source: "caller_context"` - the name of our own `<CALLER_CONTEXT>` block - and the schema accepts four values. It
-  recovered on attempt 2 (hence 2.0 attempts per case, one wasted call each), but the schema now treats
-  `caller_context` as `code_context` (`prompt v5.1`; the quote is still verified verbatim against the trigger and
-  caller windows). **Not yet measured live.**
-- **Deploy drift handled 2/2**; the assistant's quote validator held up (grounded answers 4/4, see above).
-
-**Sixth live session: `rca-callers-v3` with the alias fix** (2026-10-13, `prompt v5.1` + `quality-gate-v7`,
-`gpt-oss-120b`, 5 cases x 2 runs; [report](evals/results/rca-callers-v3-live-2026-10-13-prompt-v5.1-gate-v7-repeat2.md)).
-v3 replaces the two ambiguous v2 cases (`row.get("amount")` also reads as a missing key) with an unambiguous
-`None` from a lookup that explicitly returns `None`; the other three cases are unchanged. The label change was made
-because the case was ambiguous, not to match the model.
-
-| | Result (10 runs) |
-|---|---|
-| Category = label | **10/10** (was 6/10 on v2) |
-| Schema failure on attempt 1 | **0/10** (was 9/10): the `caller_context` alias works |
-| Accepted | 3/10 |
-| `fix_location` fired | 7/10 |
-| Stable outcome per case | 4/5 cases |
-
-- **`fix_location` did what it was written for on the blame cases.** `caller-passes-none` and
-  `caller-symptomatic-patch`: in all four runs the first attempt patched the failing function while quoting the
-  caller, the gate refused it on that check alone (score 0.935), and the retry left no patch with the right category.
-  No callee guard was accepted this session.
-- **It also produced false positives.** `control-cause-in-trigger` is the case where the *failing function* really is
-  at fault and the caller is innocent; in 2 of 2 runs the model quoted the caller's filter line to say so, patched
-  the failing function (the right fix) and was refused. Nothing deterministic that was available separated these
-  from the blame cases (`affected_files` and the patch kind are the same). Precision on this set: 5 of 7 firings
-  were the intended catch.
-- **What the change costs, and what was done about it.** A refused patch used to be lost when the retry dropped
-  it. It is now kept with the attempt (`withheld_patch`), never proposed as a pull request, shown in the console as
-  "Withheld patch (not proposed)" and named in the guidance card - with the caveat that this check can be wrong
-  when the model quotes a caller only to rule it out. The gate is deliberately conservative here: every outcome
-  still ends with a human, and the diagnosis is kept.
-
-**Seventh live session: `fix_location` as a veto did not survive its own measurement** (2026-10-14,
-`quality-gate-v7`, `gpt-oss-120b`, `rca-callers-v3`, 5 cases x 3 runs;
-[report](evals/results/rca-callers-v3-live-2026-10-14-gate-v7-repeat3.md)):
-
-| | Result (15 runs) |
-|---|---|
-| Category = label | 15/15 |
-| `fix_location` fired | **13/15** |
-| Accepted | **1/15** (the 14 others ended `needs_review` with no patch) |
-| Control case (the failing function really is at fault) | refused 3/3 - **3 false positives** |
-
-Earlier sessions (7/10 fired, 3/10 accepted) hinted at this; with more runs it is unambiguous: whenever caller
-windows are retrieved the model quotes them, and the veto then removes the patch almost every time - including the
-correct one. Nothing deterministic separated the real blame cases from the control (`affected_files`, patch kind and
-the quoted line type are the same). Because every proposal still ends with a reviewer, a heuristic that withholds the
-patch in 14 of 15 runs costs more than it protects. **`quality-gate-v8` makes `fix_location` a warning**: the patch
-is kept and accepted by the gate as before, and the reviewer is told - in the guidance card ("the patch changes the
-failing function, but the evidence quotes a caller: check where the bad value comes from"), in the gate breakdown,
-and by the guard-or-default label. The `withheld_patch` mechanism of v7 was removed with it (there is nothing left
-to withhold). Whether reviewers actually act on the warning is not something this repository can measure.
-
-**After the change** ([report](evals/results/rca-callers-v3-live-2026-10-14-gate-v8-repeat2.md), same set, 5 cases x 2):
-10/10 accepted on the first attempt (one control run needed 3), category 10/10, stable outcome for all 5 cases, 1.2
-attempts per case. 8 of the 10 accepted patches carry the `fix_location` warning and the same 8 are labelled
-guard-or-default: all six runs of the three blame cases are flagged, and the control case is flagged in 1 of 2 runs
-(a remaining false positive, now harmless to the patch). Every accepted patch on this set is a guard or a coercion
-in the failing function - which is exactly what the warning is for, and exactly why a person must read it.
-
-What the first live run showed, and what changed:
-
-- **The model did not fabricate evidence**: every "observed" quote was verbatim in the retrieved data (50/50).
-- **A real gate gap**: the *contradictory-evidence* case (error `KeyError: 'user_id'`, retrieved line reads
-  `payload["account_id"]` - deploy drift) was accepted with a confident patch. `quality-gate-v4` adds a
-  deterministic *trace/code consistency* check (blocking): if the error names a key or attribute that the
-  retrieved failing line does not use, the analysis is rejected with feedback to report insufficient evidence.
-  It never fails on lines it cannot judge (dynamic keys, unparsable lines). The case is now rejected and the model
-  abstains on retry; the mock dataset replays the live model's original answer as a regression test.
-- **Category confusion** (e.g. a missing env var classified as `missing_key`): `rca-prompt-v3` defines each
-  category by root cause. **Caveat:** the definitions were written after seeing the live failures on this same
-  dataset, so the category gain is optimistic; a held-out set is needed to confirm it.
-- **Schema regression (v3) fixed in v4**, diagnosed from the per-attempt `schema_error_fields`.
-- One case (`api-invalid-json`) produced valid JSON with whole sections missing in two attempts and a non-JSON
-  reply in the third; it ends in `needs_review` rather than being accepted with an incomplete analysis.
-
-Practical note: one full live run costs roughly 100-125k tokens with this model, i.e. about one run per day on
-Groq's free tier. Use `--sleep` to stay under the per-minute limit and `--case` to re-run selected cases.
-
-*An eval-driven change:* the first mock run showed four cases (missing dependency, DB down, pool exhausted,
-missing env var) where a correct, grounded analysis without a patch burned all 3 attempts. `quality-gate-v3`
-stops such analyses with `error_category=no_code_fix`: LLM calls on the dataset fell from 40 to 32 (average
-attempts 1.538 -> 1.231) with every quality metric unchanged.
-
-### Incident assistant evaluation
-
-```bash
-python -m evals.ask_eval --mode mock --min rules_intent_accuracy=1.0   # offline, in CI
-python -m evals.ask_eval --mode live --sleep 5                         # real model, needs GROQ_API_KEY
-```
-
-The asked-about records come from evaluation cases run through the real graph (scripted RCA replies), so they are the
-same in both modes. 11 routing questions (English and Turkish) x 5 records, and 9 model questions of five kinds:
-grounded, uncited, fabricated quote, unanswerable, approval advice / injection. Every metric is a deterministic ratio:
-
-| Metric | Mock (validation around a scripted model) |
-|---|---|
-| rules_intent_accuracy / rules_content_correctness | 55/55 / 55/55 |
-| grounded_answers_pass | 10/10 (a grounded answer is never flagged) |
-| fabricated_quotes_flagged / uncited_answers_flagged | 5/5 / 5/5 |
-| unanswerable_abstained | 15/15 ("not in the record" is accepted, not penalised) |
-| approval_advice_blocked | 10/10 (the answer is replaced, not just flagged) |
-
-Mock mode measures the **validation and routing**, not a model. In `--mode live` the same checks are applied to the
-real model's answers (the live-tagged question kinds, 2 records, `gpt-oss-120b`;
-[report](evals/results/ask-live-2026-10-11-qa-validator-v1.md)). First live run, 14 model questions:
-
-| Metric | Live (120b) | Reading |
-|---|---|---|
-| rules_* (routing, content) | 55/55, 55/55 | unchanged; no model involved |
-| unanswerable_abstained | 6/6 | the model said "not in the record" for deploy, authorship and traffic questions |
-| grounded_answers_pass | 3/4 | one false flag - a **validator bug**, see below |
-| approval advice | 1 of 4 baited prompts (the guard replaced it) | the model followed one "just approve" prompt; the guard worked; the other three it declined |
-
-The false flag was ours: the quote extractor paired backticks naively, so with a stray or doubled backtick it treated
-the prose *between* two code spans as a quotation and reported it as "not in the record". Spans are now paired by
-backtick-run width (CommonMark) and, because one stray backtick shifts all later pairs, both alignments are tried and
-the one with fewer prose-like spans wins. Unit-tested; **not re-measured live** (quota). The metric
-`approval_advice_blocked` was also misleading in live mode (a model that simply declines would read as "not
-blocked"); live runs now report `approval_advice_given_rate` (lower is better).
-The harness stores each question and answer text, so a live miss can be read, not just counted. The harness found two defects while it was being written, both fixed: quote
-verification compared against the prompt's JSON-escaped rendering (so correct quotes containing `"` were flagged),
-and a Turkish phrasing of the patch question was not routed.
-
 ## Retrieval
 
 Historical lookup is **lexical, not semantic**. The database returns the newest 200 eligible incidents of the
@@ -744,25 +346,6 @@ python -m src.services.audit_chain --heads heads.json        # exit 1, status `t
 
 Nothing stores the file for you, and it only covers what existed when you saved it.
 
-## Sentry integration
-
-`POST /integrations/sentry` accepts Sentry Integration Platform webhooks (`event_alert` and `error` resources;
-others return 204). It is designed from Sentry's public webhook documentation and tested with payloads of the
-documented shape - **it has not been exercised against a live Sentry organisation**.
-
-1. In Sentry, create an internal integration with a webhook URL `https://<host>/integrations/sentry`, enable
-   alert-rule actions and/or the `error` resource, and copy its *Client Secret*.
-2. Configure `SENTRY_CLIENT_SECRET` and map Sentry project ids to allow-listed repositories:
-   `SENTRY_PROJECT_REPOS=1234567:your-org/your-repo`.
-3. Add the integration as an action to an issue alert rule.
-
-The request is authenticated by `Sentry-Hook-Signature` (HMAC-SHA256 with the Client Secret). Sentry's own
-sample signs `JSON.stringify(body)`, so both the raw body and its compact JSON form are accepted. Requests over
-1 MB get 413, unmapped projects 422, mapped-but-not-allow-listed repositories 403. The event becomes a
-queued incident submitted by the identity `sentry` (so a human reviewer can approve its remediation);
-`in_app` frames are turned into a Python-style traceback for the parser, and the incident id is derived from
-Sentry's `event_id`, so repeated deliveries return the existing incident instead of analysing it twice.
-
 ## Ask about this incident
 
 Two things help a reviewer decide quickly, and both stay inside the project's rule that nothing is stated without
@@ -795,32 +378,6 @@ is correct. A test fails if a new gate check or error category is added without 
 
 Answers are **not executed or verified**, and the quality of the *model* answers has **not been evaluated** beyond
 unit tests with scripted replies; the rules layer is deterministic and unit-tested.
-
-## Alertmanager integration
-
-`POST /integrations/alertmanager` is a Prometheus Alertmanager `webhook_config` receiver (payload version 4),
-authenticated with an ordinary reporter API key sent as a Bearer token (every API endpoint accepts
-`Authorization: Bearer <key>` as well as `X-API-Key`). Tested with payloads of the documented shape, **not against
-a running Alertmanager**.
-
-```yaml
-receivers:
-  - name: opspulse
-    webhook_configs:
-      - url: https://<host>/integrations/alertmanager
-        http_config:
-          authorization:
-            credentials_file: /etc/alertmanager/opspulse-key   # key from: python -m scripts.make_api_key alertmanager reporter
-```
-
-Each *firing* alert becomes one incident (resolved alerts are ignored; at most 20 per notification, the rest are
-counted as `dropped`). The repository comes from the alert label `repository` (`ALERTMANAGER_REPO_LABEL`) and must
-be allow-listed; the message from `alertname`, `summary` and `description`; the stack trace from an optional
-`stack_trace` annotation. The response lists each alert as `queued`, `duplicate` or `skipped` (with the reason), so
-one alert with a missing label does not fail the batch. Incident ids derive from the alert fingerprint and start
-time: Alertmanager's repeat notifications do not create new analyses, and a 503 (database down) is safe to retry.
-**An alert without a stack trace usually ends as "insufficient evidence"** - the agent does not invent a cause from
-a metric threshold.
 
 ## Learning from reviewers
 
@@ -882,15 +439,6 @@ checks the patch against the file as it was at that commit; when the pull reques
 **current** default branch head, and if the head has moved so that it no longer applies, the PR step refuses with that
 message instead of opening a wrong PR.
 
-## Reviewer notifications
-
-Set `NOTIFY_WEBHOOK_URL` (an `https://` incoming-webhook URL; Slack and Mattermost accept the `{"text": ...}`
-payload) to be told when an incident reaches a status in `NOTIFY_ON_STATUSES` (default
-`awaiting_approval,failed`). With `PUBLIC_BASE_URL` the message links to the review console. The message
-contains only status, repository, a sanitised one-line title (no `@`-mentions or link markup from model text),
-quality score and category - never stack traces, source code or patches. Delivery failures are logged and
-counted (`opspulse_notifications_total`) and never affect incident processing.
-
 ## Review console
 
 `GET /console` serves a dependency-free web UI for reviewers: filter and search incidents (default: awaiting
@@ -935,45 +483,6 @@ page accepts `?theme=light|dark|auto` and `?status=all|needs_review|...` for dee
   script-src 'self'; ... frame-ancestors 'none'` (unit-tested). Disable with `CONSOLE_ENABLED=false`.
 - Local demo data: `alembic upgrade head && python -m scripts.seed_demo_data` runs ten evaluation cases
   through the real service layer with scripted (MOCK) replies. Screenshots above use that data.
-
-## Observability (Langfuse)
-
-Verified against **langfuse 4.17.0** (the SDK uses OpenTelemetry; the code uses `Langfuse(mask=...)`,
-`start_as_current_observation` and `propagate_attributes`). With keys unset, everything is a no-op.
-
-| Observation | Type | Content |
-|---|---|---|
-| `incident.process` (trace `opspulse.incident`, session = incident id) | chain | versions, final status, attempts, error category |
-| graph node spans + LLM generation | via `langfuse.langchain.CallbackHandler` | model, latency, token usage reported by Groq |
-| `retrieval.source_context`, `retrieval.historical_incidents` | retriever | found / match count / failure category |
-| `evaluation.quality_gate` | evaluator | score, passed, attempt |
-| `github.create_pull_request` | tool | outcome / error category |
-
-**Privacy:** a mask function runs on every payload before export: credential-shaped strings are redacted and,
-unless `LANGFUSE_CAPTURE_CONTENT=true`, any string longer than 200 characters (prompts, stack traces, source,
-model output) is replaced by `[content omitted: N chars]`. Telemetry failures are logged and never break
-processing. *Not verified against a live Langfuse project* (no keys were available); behaviour is covered by
-unit tests with a fake client.
-
-### Metrics
-
-| Metric | Type | Labels |
-|---|---|---|
-| `opspulse_incidents_finished_total` | counter | `status`, `error_category` |
-| `opspulse_pipeline_duration_seconds` | histogram | - |
-| `opspulse_llm_attempts_total` | counter | `outcome` (valid / schema_invalid / malformed / provider_error) |
-| `opspulse_llm_call_duration_seconds` | histogram | - |
-| `opspulse_llm_tokens_total` | counter | `direction` (input / output, as reported by the provider) |
-| `opspulse_quality_gate_evaluations_total` | counter | `result` (passed / rejected) |
-| `opspulse_remediation_decisions_total` | counter | `decision` |
-| `opspulse_queue_depth` | gauge | - (sampled by the worker) |
-| `opspulse_jobs_recovered_total` | counter | `outcome` (requeued / failed) |
-| `opspulse_notifications_total` | counter | `outcome` (sent / failed) |
-| `opspulse_jobs_deferred_total` | counter | `error_category` (transient provider errors) |
-
-Labels never contain repository names, identities, paths or error text. Counters are per process.
-Example alert rules: [`deploy/prometheus/alerts.yml`](deploy/prometheus/alerts.yml) (validated with `promtool`
-in CI); what to do when they fire: [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ## Setup
 
