@@ -5,6 +5,12 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Security
+- The Compose `api` and `worker` containers now run with a read-only root filesystem (only `/tmp` is a writable tmpfs), all
+  Linux capabilities dropped and `no-new-privileges`. They already ran as a non-root user. Verified on a Docker stack built
+  from this change: migrations, API and worker start healthy and an incident travels API -> queue -> worker (it ends as
+  `failed / llm_not_configured` without a model key, the same outcome the CI smoke test expects).
+
 ### Fixed
 - `docs/LIMITATIONS.md` and the README quoted "about 680 tests" and "about 95 % coverage". Measured with the CI command
   (`pytest --cov=src --cov=evals`): 922 tests, 89 % coverage. The 95 % figure was never reproduced, so it is replaced by
