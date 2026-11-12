@@ -1077,8 +1077,8 @@ stack traces or connection strings. Re-sending a request with the same `incident
 ## Testing and CI
 
 ```bash
-pytest                               # about 680 offline tests (SQLite, fakes for Groq/GitHub/Langfuse; includes property-based tests)
-pytest --cov=src --cov=evals         # coverage (about 95% total at time of writing; CI enforces a floor of 84%)
+pytest                               # 922 offline tests (SQLite, fakes for Groq/GitHub/Langfuse; includes property-based tests)
+pytest --cov=src --cov=evals         # coverage (89% total when last measured, 2026-11-12; CI enforces a floor, see ci.yml)
 python -m evals.ask_eval --mode mock # incident-assistant evaluation (offline)
 ruff check src tests evals scripts migrations && ruff format --check src tests evals scripts migrations
 mypy                                 # src/
