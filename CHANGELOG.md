@@ -5,6 +5,14 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Changed
+- The README was 1 243 lines. The 400-line **Evaluation** section moved to `docs/EVALUATION.md` and the Sentry,
+  Alertmanager, notifications and observability sections to `docs/INTEGRATIONS.md` (README now about 750 lines, with a
+  grouped contents list and a "their own pages" map). Content is unchanged apart from heading levels and relative links;
+  every link and anchor that pointed at the moved sections was rewritten. Both pages are part of the documentation site.
+- New `tests/unit/test_docs_links.py` checks that every relative link and `#anchor` in the README, CONTRIBUTING,
+  SECURITY and `docs/*.md` resolves, so a split or rename cannot leave a dead link. `mkdocs build --strict` passes locally.
+
 ### Security
 - The Compose `api` and `worker` containers now run with a read-only root filesystem (only `/tmp` is a writable tmpfs), all
   Linux capabilities dropped and `no-new-privileges`. They already ran as a non-root user. Verified on a Docker stack built
