@@ -6,6 +6,15 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Fixed
+- NUL (U+0000) in a reported error, stack trace or reviewer note was stored as is. SQLite accepts it (so every test passed),
+  but PostgreSQL text columns reject it, which on a real deployment would fail the submission (and, for Sentry and
+  Alertmanager, be retried forever). It is now removed before persisting and before the fingerprint is computed, so the
+  same failure with and without NUL is still one incident. Not reproduced against a live PostgreSQL here: the new tests
+  assert that no NUL is stored, and they fail without the fix on SQLite.
+- The Sentry webhook re-encoded the body to check the signature *before* knowing the signature was valid, so an anonymous
+  request containing a lone surrogate escape (`\ud800`) raised `UnicodeEncodeError`, and one with ~200 000 nested `[`
+  raised `RecursionError`: HTTP 500 and an "unhandled error" log instead of 401. Both now end as an invalid signature.
+  Lone surrogates that did pass a valid signature are replaced by `?` before storing, like NUL.
 - `docs/LIMITATIONS.md` and the README quoted "about 680 tests" and "about 95 % coverage". Measured with the CI command
   (`pytest --cov=src --cov=evals`): 922 tests, 89 % coverage. The 95 % figure was never reproduced, so it is replaced by
   the measured one and dated.
