@@ -6,6 +6,9 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Fixed
+- `docs/LIMITATIONS.md` and the README quoted "about 680 tests" and "about 95 % coverage". Measured with the CI command
+  (`pytest --cov=src --cov=evals`): 922 tests, 89 % coverage. The 95 % figure was never reproduced, so it is replaced by
+  the measured one and dated.
 - A commit with an empty message among the file's commits of the last 14 days crashed the source-context fetch with an
   uncaught `IndexError` (`"".splitlines()[0]`), so the analysis of that incident failed. Found while writing tests for
   `_recent_commits`; the commit is now listed with an empty subject.
