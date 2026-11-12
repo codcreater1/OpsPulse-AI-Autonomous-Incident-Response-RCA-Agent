@@ -6,6 +6,11 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Fixed
+- NUL (U+0000) in a reported error, stack trace or reviewer note was stored as is. SQLite accepts it (so every test passed),
+  but PostgreSQL text columns reject it, which on a real deployment would fail the submission (and, for Sentry and
+  Alertmanager, be retried forever). It is now removed before persisting and before the fingerprint is computed, so the
+  same failure with and without NUL is still one incident. Not reproduced against a live PostgreSQL here: the new tests
+  assert that no NUL is stored, and they fail without the fix on SQLite.
 - `docs/LIMITATIONS.md` and the README quoted "about 680 tests" and "about 95 % coverage". Measured with the CI command
   (`pytest --cov=src --cov=evals`): 922 tests, 89 % coverage. The 95 % figure was never reproduced, so it is replaced by
   the measured one and dated.
