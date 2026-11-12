@@ -5,6 +5,11 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Fixed
+- A commit with an empty message among the file's commits of the last 14 days crashed the source-context fetch with an
+  uncaught `IndexError` (`"".splitlines()[0]`), so the analysis of that incident failed. Found while writing tests for
+  `_recent_commits`; the commit is now listed with an empty subject.
+
 ### Tests
 - `github.download_repository_snapshot` (downloads and unpacks an archive from a repository we do not control) had no test at
   all; coverage of `src/integrations/github.py` was 84%. New tests cover the happy path, the download size cap, a corrupt
