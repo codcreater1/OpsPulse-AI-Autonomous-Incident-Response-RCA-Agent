@@ -6,6 +6,11 @@ All notable changes are listed here. Versions of behaviour-critical components a
 ## [Unreleased]
 
 ### Changed
+- The README is now a **90-line front page**: what it is, a two-minute demo, how it works in six steps, why it is built this way, a
+  minimal run-it-for-real block, a "where to read more" table and an honest-status paragraph. The rest moved, unchanged apart from
+  heading levels and relative links, into `docs/OVERVIEW.md` (feature and results tables), `docs/HOW_IT_WORKS.md`,
+  `docs/REVIEW_AND_SAFETY.md`, `docs/SETUP.md` and `docs/PROJECT_STATUS.md` (security model, limitations, roadmap). All five are
+  documentation-site pages; `tests/unit/test_docs_links.py` and `mkdocs build --strict` pass.
 - The README was 1 243 lines. The 400-line **Evaluation** section moved to `docs/EVALUATION.md` and the Sentry,
   Alertmanager, notifications and observability sections to `docs/INTEGRATIONS.md` (README now about 750 lines, with a
   grouped contents list and a "their own pages" map). Content is unchanged apart from heading levels and relative links;
