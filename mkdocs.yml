@@ -30,6 +30,8 @@ nav:
       - A worked example: trace-example.md
       - Limitations and what is proven: limitations.md
       - Measurements in one place: measurements.md
+      - Evaluation in detail: evaluation.md
+      - Integrations and observability: integrations.md
   - Operations:
       - API reference: api.md
       - Runbook: runbook.md
