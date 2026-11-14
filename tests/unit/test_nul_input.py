@@ -90,3 +90,13 @@ def test_absurdly_nested_json_is_a_401_not_a_server_error(client):
         headers={"Sentry-Hook-Resource": "event_alert", "Sentry-Hook-Signature": "0" * 64},
     )
     assert resp.status_code == 401
+
+
+def test_a_non_ascii_signature_header_is_a_401_not_a_server_error(client):
+    # Found by a property test: hmac.compare_digest raised TypeError for a str containing a non-ASCII character.
+    resp = client.post(
+        "/integrations/sentry",
+        content=b"{}",
+        headers=[(b"sentry-hook-resource", b"event_alert"), (b"sentry-hook-signature", b"\xe9\xff caf\xe9")],
+    )
+    assert resp.status_code == 401
