@@ -56,7 +56,9 @@ def signature_is_valid(secret: str, raw_body: bytes, provided: str | None) -> bo
     valid = False
     for body in candidates:  # evaluate every candidate: no early exit
         digest = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-        valid |= hmac.compare_digest(digest, provided.strip().lower())
+        # bytes, not str: compare_digest raises TypeError for a str with non-ASCII characters, and a header can carry
+        # any latin-1 byte, so an anonymous request with `Sentry-Hook-Signature: é` would otherwise be an HTTP 500.
+        valid |= hmac.compare_digest(digest.encode(), provided.strip().lower().encode("utf-8", errors="replace"))
     return valid
 
 
