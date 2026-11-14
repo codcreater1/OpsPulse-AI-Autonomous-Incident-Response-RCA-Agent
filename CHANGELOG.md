@@ -25,6 +25,9 @@ All notable changes are listed here. Versions of behaviour-critical components a
   `failed / llm_not_configured` without a model key, the same outcome the CI smoke test expects).
 
 ### Fixed
+- `POST /integrations/sentry` answered **HTTP 500** instead of 401 to an anonymous request whose `Sentry-Hook-Signature` header
+  contained a non-ASCII character (`hmac.compare_digest` raises `TypeError` for such a `str`). Found by a new property test that
+  feeds the signature check arbitrary bodies and headers; the digests are now compared as bytes.
 - NUL (U+0000) in a reported error, stack trace or reviewer note was stored as is. SQLite accepts it (so every test passed),
   but PostgreSQL text columns reject it, which on a real deployment would fail the submission (and, for Sentry and
   Alertmanager, be retried forever). It is now removed before persisting and before the fingerprint is computed, so the
