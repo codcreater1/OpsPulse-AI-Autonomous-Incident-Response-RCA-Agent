@@ -5,6 +5,11 @@ All notable changes are listed here. Versions of behaviour-critical components a
 
 ## [Unreleased]
 
+### Tests
+- `.env.example` was missing two settings the application reads (`WORKER_LIVENESS_FILE`, `CONSOLE_DEMO_KEY`); both are listed
+  now, with what they do. New `tests/unit/test_env_example.py` fails when a setting is read by `src/config.py` but absent from the
+  example (legacy aliases are an explicit allow-list), when the example lists something nothing reads, or when a key-like entry has a value.
+
 ### Changed
 - The README is now a **90-line front page**: what it is, a two-minute demo, how it works in six steps, why it is built this way, a
   minimal run-it-for-real block, a "where to read more" table and an honest-status paragraph. The rest moved, unchanged apart from
