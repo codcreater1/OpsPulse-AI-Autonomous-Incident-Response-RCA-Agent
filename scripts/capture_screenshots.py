@@ -60,7 +60,8 @@ def wait_ready(base: str, seconds: int = 90) -> None:
             if _get(f"{base}/healthz").get("status") == "ok":
                 return
         except OSError:
-            time.sleep(0.5)
+            pass  # not listening yet
+        time.sleep(0.5)  # also when it answered but is not ready: do not poll in a busy loop
     raise SystemExit("the demo server did not start")
 
 
